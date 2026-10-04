@@ -20,8 +20,11 @@ import {
   useCameraPermission,
   useCodeScanner
 } from 'react-native-vision-camera';
-import { Product, Sale, SaleLine } from './src/db/entity';
-import { checkout, createProduct, findProductByBarcode, getDatabase } from './src/db/db';
+
+import { Product } from './src/db/product/types';
+import { Sale, SaleLine } from './src/db/sale/types';
+
+import { checkout, createProduct, findProductByBarcode, getDatabase } from './src/db/rxdb';
 
 type Tab = 'sell' | 'products' | 'sales';
 type Cart = Record<string, SaleLine>;

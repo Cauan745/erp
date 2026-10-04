@@ -1,14 +1,3 @@
-
-export type Product = {
-  id: string;
-  name: string;
-  barcode: string;
-  category: string;
-  price: number;
-  stock: number;
-  createdAt: string;
-};
-
 export type SaleLine = {
   productId: string;
   name: string;
@@ -24,5 +13,4 @@ export type Sale = {
   paymentMethod: 'cash';
   createdAt: string;
 };
-
 
