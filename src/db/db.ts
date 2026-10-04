@@ -6,35 +6,11 @@ import {
   getSQLiteBasicsExpoSQLiteAsync
 } from 'rxdb/plugins/storage-sqlite';
 
-export type ProductDoc = {
-  id: string;
-  name: string;
-  barcode: string;
-  category: string;
-  price: number;
-  stock: number;
-  createdAt: string;
-};
-
-export type SaleLine = {
-  productId: string;
-  name: string;
-  quantity: number;
-  unitPrice: number;
-  lineTotal: number;
-};
-
-export type SaleDoc = {
-  id: string;
-  lines: SaleLine[];
-  total: number;
-  paymentMethod: 'cash';
-  createdAt: string;
-};
+import { Product, Sale, SaleLine } from './entity';
 
 type Collections = {
-  products: RxCollection<ProductDoc>;
-  sales: RxCollection<SaleDoc>;
+  products: RxCollection<Product>;
+  sales: RxCollection<Sale>;
 };
 
 export type AppDatabase = RxDatabase<Collections>;
@@ -114,7 +90,7 @@ const saleSchema = {
   indexes: ['createdAt']
 } as const;
 
-const seedProducts: ProductDoc[] = [
+const seedProducts: Product[] = [
   {
     id: 'prod-coffee',
     name: 'House Blend Coffee',
@@ -188,9 +164,9 @@ export async function getDatabase(): Promise<AppDatabase> {
   return dbPromise;
 }
 
-export async function createProduct(input: Omit<ProductDoc, 'id' | 'createdAt'>) {
+export async function createProduct(input: Omit<Product, 'id' | 'createdAt'>) {
   const db = await getDatabase();
-  const product: ProductDoc = {
+  const product: Product = {
     ...input,
     id: id('product'),
     createdAt: new Date().toISOString()
@@ -217,7 +193,7 @@ export async function checkout(lines: SaleLine[]) {
     }
   }
 
-  const sale: SaleDoc = {
+  const sale: Sale = {
     id: id('sale'),
     lines,
     total,

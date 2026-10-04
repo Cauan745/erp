@@ -20,7 +20,8 @@ import {
   useCameraPermission,
   useCodeScanner
 } from 'react-native-vision-camera';
-import { checkout, createProduct, findProductByBarcode, getDatabase, ProductDoc, SaleDoc, SaleLine } from './src/db';
+import { Product, Sale, SaleLine } from './src/db/entity';
+import { checkout, createProduct, findProductByBarcode, getDatabase } from './src/db/db';
 
 type Tab = 'sell' | 'products' | 'sales';
 type Cart = Record<string, SaleLine>;
@@ -51,8 +52,8 @@ export default function App() {
 function AppContent() {
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<Tab>('sell');
-  const [products, setProducts] = useState<ProductDoc[]>([]);
-  const [sales, setSales] = useState<SaleDoc[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
   const [cart, setCart] = useState<Cart>({});
   const [search, setSearch] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -71,8 +72,8 @@ function AppContent() {
         db.products.find({ sort: [{ createdAt: 'desc' }] }).exec(),
         db.sales.find({ sort: [{ createdAt: 'desc' }] }).exec()
       ]);
-      setProducts(nextProducts.map((document) => document.toJSON() as ProductDoc));
-      setSales(nextSales.map((document) => document.toJSON() as unknown as SaleDoc));
+      setProducts(nextProducts.map((document) => document.toJSON() as Product));
+      setSales(nextSales.map((document) => document.toJSON() as unknown as Sale));
       setStartupError(null);
       setLoading(false);
     } catch (error) {
@@ -101,7 +102,7 @@ function AppContent() {
     setTimeout(() => setNotice(''), 2400);
   };
 
-  const addToCart = (product: ProductDoc) => {
+  const addToCart = (product: Product) => {
     setCart((current) => {
       const existing = current[product.id];
       const quantity = (existing?.quantity ?? 0) + 1;
@@ -239,7 +240,7 @@ function AppContent() {
   );
 }
 
-function SellTab({ products, search, setSearch, openScanner, addToCart, cartQuantity, cartTotal, openCart }: { products: ProductDoc[]; search: string; setSearch: (value: string) => void; openScanner: () => void; addToCart: (product: ProductDoc) => void; cartQuantity: number; cartTotal: number; openCart: () => void }) {
+function SellTab({ products, search, setSearch, openScanner, addToCart, cartQuantity, cartTotal, openCart }: { products: Product[]; search: string; setSearch: (value: string) => void; openScanner: () => void; addToCart: (product: Product) => void; cartQuantity: number; cartTotal: number; openCart: () => void }) {
   return <View style={styles.content}>
     <View style={styles.heroRow}><View><Text style={styles.sectionKicker}>QUICK SALE</Text><Text style={styles.sectionTitle}>Build a cart</Text></View><Pressable style={styles.scanButton} onPress={openScanner}><Text style={styles.scanIcon}>⌁</Text><Text style={styles.scanButtonText}>Scan</Text></Pressable></View>
     <View style={styles.searchBox}><Text style={styles.searchIcon}>⌕</Text><TextInput value={search} onChangeText={setSearch} placeholder="Search products or barcode" placeholderTextColor={colors.muted} style={styles.searchInput} /></View>
@@ -249,7 +250,7 @@ function SellTab({ products, search, setSearch, openScanner, addToCart, cartQuan
   </View>;
 }
 
-function ProductsTab({ products, form, setForm, saveProduct, openScanner }: { products: ProductDoc[]; form: { name: string; price: string; barcode: string; category: string }; setForm: React.Dispatch<React.SetStateAction<{ name: string; price: string; barcode: string; category: string }>>; saveProduct: () => void; openScanner: () => void }) {
+function ProductsTab({ products, form, setForm, saveProduct, openScanner }: { products: Product[]; form: { name: string; price: string; barcode: string; category: string }; setForm: React.Dispatch<React.SetStateAction<{ name: string; price: string; barcode: string; category: string }>>; saveProduct: () => void; openScanner: () => void }) {
   return <KeyboardAvoidingView style={styles.content} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.sectionKicker}>CATALOG</Text><Text style={styles.sectionTitle}>Add a product</Text><Text style={styles.muted}>Products are available immediately in this device’s local catalog.</Text>
@@ -265,12 +266,12 @@ function ProductsTab({ products, form, setForm, saveProduct, openScanner }: { pr
   </KeyboardAvoidingView>;
 }
 
-function SalesTab({ sales }: { sales: SaleDoc[] }) {
+function SalesTab({ sales }: { sales: Sale[] }) {
   const revenue = sales.reduce((sum, sale) => sum + sale.total, 0);
   return <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}><Text style={styles.sectionKicker}>HISTORY</Text><Text style={styles.sectionTitle}>Recent sales</Text><View style={styles.statsRow}><Stat label="Sales" value={`${sales.length}`} /><Stat label="Revenue" value={money(revenue)} /></View>{sales.length ? sales.map((sale) => <View style={styles.saleCard} key={sale.id}><View><Text style={styles.saleTitle}>{sale.lines.reduce((sum, line) => sum + line.quantity, 0)} items</Text><Text style={styles.muted}>{shortDate(sale.createdAt)} · Cash</Text></View><Text style={styles.saleTotal}>{money(sale.total)}</Text></View>) : <EmptyState text="Completed checkouts will appear here." />}</ScrollView>;
 }
 
-function ProductRow({ product, onPress, compact = false }: { product: ProductDoc; onPress?: () => void; compact?: boolean }) {
+function ProductRow({ product, onPress, compact = false }: { product: Product; onPress?: () => void; compact?: boolean }) {
   const body = <View style={[styles.productRow, compact && styles.productRowCompact]}><View style={styles.productMark}><Text style={styles.productMarkText}>{product.name.slice(0, 1).toUpperCase()}</Text></View><View style={styles.productInfo}><Text style={styles.productName}>{product.name}</Text><Text style={styles.muted}>{product.category} · {product.barcode || 'No barcode'}</Text></View><View style={styles.productRight}><Text style={styles.productPrice}>{money(product.price)}</Text>{onPress ? <Text style={styles.addHint}>Add +</Text> : <Text style={styles.muted}>{product.stock} in stock</Text>}</View></View>;
   return onPress ? <Pressable onPress={onPress}>{body}</Pressable> : body;
 }
