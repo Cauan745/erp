@@ -4,7 +4,7 @@ An Expo + React Native + TypeScript local-first ERP slice.
 
 ## Included
 
-- Local product catalogue backed by RxDB and persisted to native SQLite on the device.
+- Local product catalogue backed by SQLite on the device.
 - Barcode scanning with `react-native-vision-camera` for EAN/UPC/Code 128 formats.
 - Product lookup, add-to-cart, quantity changes, and cash checkout.
 - Local sales history and stock decrement after checkout.
@@ -22,7 +22,7 @@ VisionCamera needs a native development build; the scanner will not work in the 
 
 ## Storage note
 
-The MVP uses RxDB's free SQLite trial adapter with Expo SQLite. It is suitable for this prototype, but the trial adapter has a document limit and in-memory query execution; move to RxDB Premium SQLite or Expo Filesystem storage before production. The backend and replication layer are intentionally not included yet.
+The MVP uses Expo SQLite directly. Products and sales are stored locally, and checkout writes stock changes and sale records in one transaction. The backend and replication layer are intentionally not included yet.
 
 ## Next slice
 

@@ -1,21 +1,29 @@
 export const CREATE_SALES_TABLE = `
   CREATE TABLE IF NOT EXISTS sales (
-    sale_id INT PRIMARY KEY,
-    total REAL NOT NULL,
-    payment_method TEXT,
-    updated_at TEXT,
-    created_at TEXT NOT NULL,
+    id TEXT PRIMARY KEY NOT NULL,
+    total_cents INTEGER NOT NULL CHECK (total_cents >= 0),
+    payment_method TEXT NOT NULL CHECK (payment_method IN ('cash')),
+    created_at TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS sale_items (
-    sale_item_id INT PRIMARY KEY,
-    sale_id INT NOT NULL,
-    product_id INT NOT NULL,
-   
-    quantity INT NOT NULL,
-    unit_price REAL NOT NULL,
- 
-    FOREIGN KEY (sale_id) REFERENCES sales(sale_id)
-    FOREIGN KEY (product_id) REFERENCES products(product_id)
+    id TEXT PRIMARY KEY NOT NULL,
+    sale_id TEXT NOT NULL,
+    line_number INTEGER NOT NULL CHECK (line_number >= 0),
+    product_id TEXT NOT NULL,
+    product_name TEXT NOT NULL,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    unit_price_cents INTEGER NOT NULL CHECK (unit_price_cents >= 0),
+    line_total_cents INTEGER NOT NULL CHECK (line_total_cents >= 0),
+    FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id)
   );
-`
+`;
+
+export const CREATE_SALE_INDEXES = `
+  CREATE INDEX IF NOT EXISTS sales_created_at_idx
+    ON sales(created_at DESC);
+
+  CREATE INDEX IF NOT EXISTS sale_items_sale_id_idx
+    ON sale_items(sale_id);
+`;

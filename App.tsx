@@ -24,7 +24,7 @@ import {
 import { Product } from './src/db/product/types';
 import { Sale, SaleLine } from './src/db/sale/types';
 
-import { checkout, createProduct, findProductByBarcode, getDatabase } from './src/db/rxdb';
+import { checkout, createProduct, findProductByBarcode, listProducts, listSales } from './src/db';
 
 type Tab = 'sell' | 'products' | 'sales';
 type Cart = Record<string, SaleLine>;
@@ -70,13 +70,9 @@ function AppContent() {
 
   const refresh = useCallback(async () => {
     try {
-      const db = await getDatabase();
-      const [nextProducts, nextSales] = await Promise.all([
-        db.products.find({ sort: [{ createdAt: 'desc' }] }).exec(),
-        db.sales.find({ sort: [{ createdAt: 'desc' }] }).exec()
-      ]);
-      setProducts(nextProducts.map((document) => document.toJSON() as Product));
-      setSales(nextSales.map((document) => document.toJSON() as unknown as Sale));
+      const [nextProducts, nextSales] = await Promise.all([listProducts(), listSales()]);
+      setProducts(nextProducts);
+      setSales(nextSales);
       setStartupError(null);
       setLoading(false);
     } catch (error) {
@@ -150,10 +146,15 @@ function AppContent() {
       showNotice('Barcode captured');
       return;
     }
-    const product = await findProductByBarcode(barcode);
-    if (product) {
-      addToCart(product.toJSON());
-      setSearch('');
+    try {
+      const product = await findProductByBarcode(barcode);
+      if (product) {
+        addToCart(product);
+        setSearch('');
+        return;
+      }
+    } catch (error) {
+      Alert.alert('Product lookup failed', errorMessage(error));
       return;
     }
     Alert.alert('Product not found', `No product is registered for ${barcode}.`, [
@@ -169,20 +170,28 @@ function AppContent() {
       Alert.alert('Check product details', 'Enter a product name and a valid price.');
       return;
     }
-    await createProduct({ name, price, barcode: productForm.barcode.trim(), category: productForm.category.trim() || 'General', stock: 0 });
-    setProductForm({ name: '', price: '', barcode: '', category: 'General' });
-    await refresh();
-    showNotice('Product saved locally');
+    try {
+      await createProduct({ name, price, barcode: productForm.barcode.trim(), category: productForm.category.trim() || 'General', stock: 0 });
+      setProductForm({ name: '', price: '', barcode: '', category: 'General' });
+      await refresh();
+      showNotice('Product saved locally');
+    } catch (error) {
+      Alert.alert('Could not save product', errorMessage(error));
+    }
   };
 
   const completeCheckout = async () => {
     if (!cartLines.length) return;
-    await checkout(cartLines);
-    setCart({});
-    setCheckoutOpen(false);
-    setCartOpen(false);
-    await refresh();
-    showNotice('Sale saved on this device');
+    try {
+      await checkout(cartLines);
+      setCart({});
+      setCheckoutOpen(false);
+      setCartOpen(false);
+      await refresh();
+      showNotice('Sale saved on this device');
+    } catch (error) {
+      Alert.alert('Could not complete sale', errorMessage(error));
+    }
   };
 
   if (loading) {
