@@ -19,6 +19,15 @@ The original project plan mentioned RxDB with SQLite storage. The implementation
 
 Do not reintroduce RxDB or its storage plugin unless the user explicitly asks for that change. The current database code is under `src/db/`.
 
+## Localization
+
+- The app uses the typed i18n layer under `src/i18n/`.
+- Brazilian Portuguese (`pt-BR`) is the default locale. Keep English translations available as the fallback.
+- Put every user-facing string in the translation dictionaries, including labels, placeholders, alerts, toasts, empty states, and native permission text.
+- Do not translate internal identifiers, database values, enum names, SQL literals, product data, stock adjustment reasons, sale snapshots, or logs. Translate enum-like values only at the UI boundary.
+- Repository errors should use internal error codes. The UI translates those codes before displaying them.
+- Use `Intl.NumberFormat` with BRL for money and locale-aware date formatting. Keep product prices stored as integer cents in SQLite.
+
 ## Important files
 
 - `App.tsx` contains the UI, navigation tabs, barcode scanner modal, cart, checkout modal, and startup error handling.
