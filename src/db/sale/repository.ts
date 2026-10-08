@@ -41,6 +41,11 @@ export type StockShortage = {
   requested: number;
 };
 
+export type CheckoutOptions = {
+  allowInsufficientStock?: boolean;
+  allowInsufficientStockProductIds?: readonly string[];
+};
+
 export class InsufficientStockError extends AppError {
   readonly shortage: StockShortage;
 
@@ -106,7 +111,7 @@ export async function listSales(): Promise<Sale[]> {
 
 export async function checkout(
   lines: SaleLine[],
-  options: { allowInsufficientStock?: boolean } = {}
+  options: CheckoutOptions = {}
 ): Promise<Sale> {
   if (!lines.length) {
     throw new AppError('emptySale');
@@ -140,7 +145,9 @@ export async function checkout(
       if (!product) {
         throw new AppError('productMissing');
       }
-      if (product.stock < quantity && !options.allowInsufficientStock) {
+      const allowInsufficientStock = options.allowInsufficientStock
+        || options.allowInsufficientStockProductIds?.includes(productId);
+      if (product.stock < quantity && !allowInsufficientStock) {
         throw new InsufficientStockError({
           productId: product.id,
           productName: product.name,
@@ -166,7 +173,9 @@ export async function checkout(
     const totalCents = saleLineRecords.reduce((sum, line) => sum + line.lineTotalCents, 0);
 
     for (const line of saleLineRecords) {
-      const result = options.allowInsufficientStock
+      const allowInsufficientStock = options.allowInsufficientStock
+        || options.allowInsufficientStockProductIds?.includes(line.productId);
+      const result = allowInsufficientStock
         ? await transaction.runAsync(
           `UPDATE products
            SET stock = stock - ?, updated_at = ?

@@ -10,18 +10,21 @@ import {
   listProducts,
   listSales,
   listStockHistory,
-  adjustStock
+  adjustStock,
+  STOCK_REASON_AUTO_SALE_REPLENISHMENT,
+  updateStockAdjustmentReason
 } from '../db';
 import { Product } from '../db/product/types';
-import { Sale, SaleLine } from '../db/sale/types';
+import { Sale } from '../db/sale/types';
 import { StockHistoryEntry } from '../db/stock/types';
 import { errorMessage } from '../formatters';
 import { useI18n } from '../i18n';
-import { Cart, ProductForm, SetProductForm, Tab } from '../types';
+import { Cart, CartLine, ProductForm, SetProductForm, Tab } from '../types';
 
 const emptyProductForm: ProductForm = {
   name: '',
   price: '',
+  stock: '0',
   barcode: '',
   category: ''
 };
@@ -43,6 +46,7 @@ export function useAppState() {
   const [startupError, setStartupError] = useState<string | null>(null);
   const [productForm, setProductForm] = useState<ProductForm>(emptyProductForm);
   const [stockAdjustmentProductId, setStockAdjustmentProductId] = useState<string | null>(null);
+  const [stockReasonEditEntry, setStockReasonEditEntry] = useState<StockHistoryEntry | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -88,7 +92,7 @@ export function useAppState() {
     setTimeout(() => setNotice(''), 2400);
   };
 
-  const addToCart = (product: Product) => {
+  const addProductToCart = (product: Product, allowInsufficientStock = false) => {
     setCart((current) => {
       const existing = current[product.id];
       const quantity = (existing?.quantity ?? 0) + 1;
@@ -99,14 +103,130 @@ export function useAppState() {
           name: product.name,
           quantity,
           unitPrice: product.price,
-          lineTotal: quantity * product.price
+          lineTotal: quantity * product.price,
+          allowInsufficientStock: existing?.allowInsufficientStock || allowInsufficientStock
         }
       };
     });
     showNotice(t('alerts.productAdded', { productName: product.name }));
   };
 
-  const updateQuantity = (line: SaleLine, delta: number) => {
+  const addStock = async (productId: string, quantity: number) => {
+    try {
+      await addProductStock(productId, quantity, STOCK_REASON_AUTO_SALE_REPLENISHMENT);
+      await refresh();
+      return true;
+    } catch (error) {
+      Alert.alert(t('alerts.addStockFailedTitle'), errorMessage(error, t));
+      return false;
+    }
+  };
+
+  const addStockAndProductToCart = async (product: Product, quantity: number) => {
+    if (await addStock(product.id, quantity)) {
+      addProductToCart(product);
+    }
+  };
+
+  const addToCart = (product: Product) => {
+    const existing = cart[product.id];
+    const requested = (existing?.quantity ?? 0) + 1;
+    const shortage = requested - product.stock;
+
+    if (shortage <= 0 || existing?.allowInsufficientStock) {
+      addProductToCart(product, existing?.allowInsufficientStock);
+      return;
+    }
+
+    Alert.alert(
+      t('alerts.notEnoughStockTitle'),
+      t('alerts.notEnoughStockMessage', {
+        productName: product.name,
+        available: product.stock,
+        requested
+      }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('alerts.addStockForSale', { quantity: shortage }),
+          onPress: () => { void addStockAndProductToCart(product, shortage); }
+        },
+        {
+          text: t('sell.sellAnyway'),
+          onPress: () => addProductToCart(product, true)
+        }
+      ]
+    );
+  };
+
+  const updateQuantity = (line: CartLine, delta: number) => {
+    if (delta > 0) {
+      const product = products.find((item) => item.id === line.productId);
+      const requested = line.quantity + delta;
+      const shortage = requested - (product?.stock ?? 0);
+
+      if (line.allowInsufficientStock || shortage <= 0) {
+        setCart((current) => ({
+          ...current,
+          [line.productId]: {
+            ...line,
+            quantity: requested,
+            lineTotal: requested * line.unitPrice
+          }
+        }));
+        return;
+      }
+
+      Alert.alert(
+        t('alerts.notEnoughStockTitle'),
+        t('alerts.notEnoughStockMessage', {
+          productName: line.name,
+          available: product?.stock ?? 0,
+          requested
+        }),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('alerts.addStockForSale', { quantity: shortage }),
+            onPress: () => {
+              if (!product) return;
+              void (async () => {
+                if (!(await addStock(product.id, shortage))) return;
+                setCart((current) => {
+                  const currentLine = current[line.productId];
+                  if (!currentLine) return current;
+                  return {
+                    ...current,
+                    [line.productId]: {
+                      ...currentLine,
+                      quantity: currentLine.quantity + delta,
+                      lineTotal: (currentLine.quantity + delta) * currentLine.unitPrice
+                    }
+                  };
+                });
+                showNotice(t('alerts.productAdded', { productName: line.name }));
+              })();
+            }
+          },
+          {
+            text: t('sell.sellAnyway'),
+            onPress: () => {
+              setCart((current) => ({
+                ...current,
+                [line.productId]: {
+                  ...line,
+                  quantity: requested,
+                  lineTotal: requested * line.unitPrice,
+                  allowInsufficientStock: true
+                }
+              }));
+            }
+          }
+        ]
+      );
+      return;
+    }
+
     setCart((current) => {
       const quantity = line.quantity + delta;
       if (quantity <= 0) {
@@ -161,7 +281,8 @@ export function useAppState() {
   const saveProduct = async () => {
     const name = productForm.name.trim();
     const price = Number(productForm.price.replace(',', '.'));
-    if (!name || !Number.isFinite(price) || price < 0) {
+    const stock = Number(productForm.stock.trim());
+    if (!name || !Number.isFinite(price) || price < 0 || !Number.isSafeInteger(stock)) {
       Alert.alert(t('alerts.checkProductDetailsTitle'), t('alerts.checkProductDetailsMessage'));
       return;
     }
@@ -170,9 +291,9 @@ export function useAppState() {
       await createProduct({
         name,
         price,
+        stock,
         barcode: productForm.barcode.trim(),
-        category: productForm.category.trim() || t('products.categoryPlaceholder'),
-        stock: 0
+        category: productForm.category.trim() || t('products.categoryPlaceholder')
       });
       setProductForm(emptyProductForm);
       await refresh();
@@ -201,9 +322,26 @@ export function useAppState() {
     }
   };
 
-  const retryCheckoutAfterAddingStock = async (productId: string) => {
+  const saveStockReason = async (reason: string) => {
+    if (!stockReasonEditEntry || stockReasonEditEntry.source !== 'adjustment') return;
+
     try {
-      await addProductStock(productId);
+      await updateStockAdjustmentReason(stockReasonEditEntry.id, reason);
+      setStockReasonEditEntry(null);
+      await refresh();
+      showNotice(t('alerts.stockReasonUpdated'));
+    } catch (error) {
+      Alert.alert(t('alerts.updateStockReasonFailedTitle'), errorMessage(error, t));
+    }
+  };
+
+  const retryCheckoutAfterAddingStock = async (shortage: InsufficientStockError['shortage']) => {
+    try {
+      await addProductStock(
+        shortage.productId,
+        shortage.requested - shortage.available,
+        STOCK_REASON_AUTO_SALE_REPLENISHMENT
+      );
       await refresh();
     } catch (error) {
       Alert.alert(t('alerts.addStockFailedTitle'), errorMessage(error, t));
@@ -213,10 +351,16 @@ export function useAppState() {
     await completeCheckout();
   };
 
-  const completeCheckout = async (allowInsufficientStock = false): Promise<void> => {
+  const completeCheckout = async (extraAllowedProductId?: string): Promise<void> => {
     if (!cartLines.length) return;
     try {
-      await checkout(cartLines, { allowInsufficientStock });
+      const allowInsufficientStockProductIds = cartLines
+        .filter((line) => line.allowInsufficientStock)
+        .map((line) => line.productId);
+      if (extraAllowedProductId && !allowInsufficientStockProductIds.includes(extraAllowedProductId)) {
+        allowInsufficientStockProductIds.push(extraAllowedProductId);
+      }
+      await checkout(cartLines, { allowInsufficientStockProductIds });
       setCart({});
       setCheckoutOpen(false);
       setCartOpen(false);
@@ -231,12 +375,12 @@ export function useAppState() {
           [
             { text: t('common.cancel'), style: 'cancel' },
             {
-              text: t('alerts.addOneToStock'),
-              onPress: () => { void retryCheckoutAfterAddingStock(shortage.productId); }
+              text: t('alerts.addStockForSale', { quantity: shortage.requested - shortage.available }),
+              onPress: () => { void retryCheckoutAfterAddingStock(shortage); }
             },
             {
               text: t('sell.sellAnyway'),
-              onPress: () => { void completeCheckout(true); }
+              onPress: () => { void completeCheckout(shortage.productId); }
             }
           ]
         );
@@ -277,6 +421,13 @@ export function useAppState() {
     stockAdjustmentOpen: Boolean(stockAdjustmentProductId),
     openStockAdjustment: setStockAdjustmentProductId,
     closeStockAdjustment: () => setStockAdjustmentProductId(null),
+    stockReasonEditEntry,
+    stockReasonEditOpen: Boolean(stockReasonEditEntry),
+    openStockReasonEdit: (entry: StockHistoryEntry) => {
+      if (entry.source === 'adjustment') setStockReasonEditEntry(entry);
+    },
+    closeStockReasonEdit: () => setStockReasonEditEntry(null),
+    saveStockReason,
     openScanner,
     addToCart,
     updateQuantity,

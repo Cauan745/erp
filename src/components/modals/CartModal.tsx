@@ -1,18 +1,18 @@
 import { Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SaleLine } from '../../db/sale/types';
 import { money } from '../../formatters';
 import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
+import { CartLine } from '../../types';
 import { EmptyState } from '../common/EmptyState';
 
 type CartModalProps = {
   visible: boolean;
-  lines: SaleLine[];
+  lines: CartLine[];
   total: number;
   onClose: () => void;
-  onUpdateQuantity: (line: SaleLine, delta: number) => void;
+  onUpdateQuantity: (line: CartLine, delta: number) => void;
   onCheckout: () => void;
 };
 

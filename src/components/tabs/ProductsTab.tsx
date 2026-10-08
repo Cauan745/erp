@@ -1,6 +1,7 @@
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { colors } from '../../constants';
+import { STOCK_REASON_AUTO_SALE_REPLENISHMENT } from '../../db';
 import { Product } from '../../db/product/types';
 import { StockHistoryEntry } from '../../db/stock/types';
 import { shortDate } from '../../formatters';
@@ -17,6 +18,7 @@ type ProductsTabProps = {
   onSave: () => void;
   onScan: () => void;
   onOpenStockAdjustment: (productId: string) => void;
+  onEditStockReason: (entry: StockHistoryEntry) => void;
   stockHistory: StockHistoryEntry[];
 };
 
@@ -27,9 +29,18 @@ export function ProductsTab({
   onSave,
   onScan,
   onOpenStockAdjustment,
+  onEditStockReason,
   stockHistory
 }: ProductsTabProps) {
   const { locale, t } = useI18n();
+
+  const reasonLabel = (entry: StockHistoryEntry) => {
+    if (entry.source === 'sale') return t('products.sale');
+    if (entry.reason === STOCK_REASON_AUTO_SALE_REPLENISHMENT) {
+      return t('products.autoSaleReplenishment');
+    }
+    return entry.reason || t('products.noReason');
+  };
 
   return (
     <KeyboardAvoidingView style={styles.content} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -50,6 +61,13 @@ export function ProductsTab({
           placeholder={t('products.pricePlaceholder')}
           keyboardType="decimal-pad"
           onChangeText={(price) => setForm((current) => ({ ...current, price }))}
+        />
+        <Field
+          label={t('products.stock')}
+          value={form.stock}
+          placeholder={t('products.stockPlaceholder')}
+          keyboardType="numbers-and-punctuation"
+          onChangeText={(stock) => setForm((current) => ({ ...current, stock }))}
         />
 
         <View style={styles.fieldLabelRow}>
@@ -97,12 +115,19 @@ export function ProductsTab({
               <View style={styles.stockHistoryInfo}>
                 <Text style={styles.productName}>{entry.productName}</Text>
                 <Text style={styles.muted}>
-                  {entry.source === 'sale' ? t('products.sale') : entry.reason || t('products.noReason')} · {shortDate(entry.createdAt, locale)}
+                  {reasonLabel(entry)} · {shortDate(entry.createdAt, locale)}
                 </Text>
               </View>
-              <Text style={[styles.stockHistoryQuantity, entry.quantity < 0 && styles.stockHistoryDecrease]}>
-                {entry.quantity > 0 ? '+' : ''}{entry.quantity}
-              </Text>
+              <View style={styles.stockHistoryActions}>
+                <Text style={[styles.stockHistoryQuantity, entry.quantity < 0 && styles.stockHistoryDecrease]}>
+                  {entry.quantity > 0 ? '+' : ''}{entry.quantity}
+                </Text>
+                {entry.source === 'adjustment' ? (
+                  <Pressable onPress={() => onEditStockReason(entry)} hitSlop={8}>
+                    <Text style={styles.addHint}>{t('products.editReason')}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           )) : <Text style={styles.muted}>{t('products.noStockChanges')}</Text>}
         </View>

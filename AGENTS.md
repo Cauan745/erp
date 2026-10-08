@@ -38,6 +38,9 @@ Do not reintroduce RxDB or its storage plugin unless the user explicitly asks fo
 - `src/db/sale/schema.ts` defines sales and sale item tables and indexes.
 - `src/db/sale/repository.ts` contains sales listing and checkout transactions.
 - `src/db/sale/types.ts` defines `Sale` and `SaleLine`.
+- `src/db/stock/repository.ts` contains stock changes, stock-history reads, and stock-adjustment reason updates.
+- `src/components/tabs/ProductsTab.tsx` contains product creation, product stock display, and stock history actions.
+- `src/components/modals/StockReasonModal.tsx` edits the reason on a saved manual stock adjustment.
 - `src/db/index.ts` is the database repository export surface used by the app.
 - `app.json` configures Expo, VisionCamera permissions, and the SQLite plugin.
 - `Makefile` provides the `make run` command.
@@ -56,6 +59,10 @@ Do not reintroduce RxDB or its storage plugin unless the user explicitly asks fo
 - Sale items must keep product name and price snapshots so sale history remains stable after a product changes.
 - Keep stock validation for normal checkout, but allow the explicit "Sell anyway" override to make stock negative.
 - Store manual signed stock changes in `stock_adjustments`; each manual change must update `products.stock` and insert its history row in one transaction.
+- Allow the user to edit only reasons stored in `stock_adjustments`; sale-derived history rows are read-only. Use the history `source` field to distinguish them, never the reason text, because a manual reason may equal `Venda` or another sale label.
+- Editing a stock-adjustment reason must update only its `reason` column. It must not change the recorded quantity or product stock.
+- Automatic stock added to complete a sale must store its internal reason code and translate that code only at the UI boundary.
+- Product creation accepts an integer initial stock and defaults the form value to `0`.
 - Do not copy sale stock changes into `stock_adjustments`. Combine sales and manual adjustments when displaying stock history.
 
 ## Native and platform rules

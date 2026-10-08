@@ -55,6 +55,9 @@ export function StockUpdateModal({ visible, product, onClose, onSubmit }: StockU
             placeholder={t('stock.reasonPlaceholder')}
             placeholderTextColor={colors.muted}
             style={styles.input}
+            editable
+            autoCapitalize="sentences"
+            returnKeyType="done"
           />
 
           <Pressable style={styles.primaryButton} onPress={() => onSubmit(quantity, reason)}>

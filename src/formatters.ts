@@ -21,6 +21,7 @@ const errorKeys: Record<AppErrorCode, TranslationKey> = {
   productNameRequired: 'errors.productNameRequired',
   productStockInteger: 'errors.productStockInteger',
   stockChangeInteger: 'errors.stockChangeInteger',
+  stockAdjustmentMissing: 'errors.stockAdjustmentMissing',
   productMissing: 'errors.productMissing',
   stockQuantityPositive: 'errors.stockQuantityPositive',
   emptySale: 'errors.emptySale',

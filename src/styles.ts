@@ -40,6 +40,7 @@ export const styles = StyleSheet.create({
   addHint: { color: colors.accent, fontSize: 12, fontWeight: '700' },
   stockHistoryCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.panel, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 10 },
   stockHistoryInfo: { flex: 1, marginRight: 12 },
+  stockHistoryActions: { alignItems: 'flex-end', marginLeft: 12, gap: 4 },
   stockHistoryQuantity: { color: colors.accent, fontSize: 17, fontWeight: '800' },
   stockHistoryDecrease: { color: colors.danger },
   cartBar: { position: 'absolute', bottom: 11, left: 0, right: 0, backgroundColor: colors.accent, borderRadius: 17, paddingHorizontal: 17, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },

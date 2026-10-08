@@ -8,7 +8,7 @@ type FieldProps = {
   value: string;
   placeholder: string;
   onChangeText: (value: string) => void;
-  keyboardType?: 'decimal-pad';
+  keyboardType?: 'decimal-pad' | 'numbers-and-punctuation';
 };
 
 export function Field({ label, value, placeholder, onChangeText, keyboardType }: FieldProps) {

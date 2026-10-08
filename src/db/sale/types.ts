@@ -13,4 +13,3 @@ export type Sale = {
   paymentMethod: 'cash';
   createdAt: string;
 };
-

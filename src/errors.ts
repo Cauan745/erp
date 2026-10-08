@@ -4,6 +4,7 @@ export type AppErrorCode =
   | 'productNameRequired'
   | 'productStockInteger'
   | 'stockChangeInteger'
+  | 'stockAdjustmentMissing'
   | 'productMissing'
   | 'stockQuantityPositive'
   | 'emptySale'

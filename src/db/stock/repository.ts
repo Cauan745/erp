@@ -14,6 +14,8 @@ type StockHistoryRow = {
   created_at: string;
 };
 
+export const STOCK_REASON_AUTO_SALE_REPLENISHMENT = 'sale-shortage-replenishment';
+
 const id = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 async function runInTransaction(
@@ -63,12 +65,28 @@ export async function adjustStock(productId: string, quantity: number, reason?: 
   });
 }
 
-export async function addProductStock(productId: string, quantity = 1): Promise<void> {
+export async function addProductStock(productId: string, quantity = 1, reason?: string): Promise<void> {
   if (!Number.isSafeInteger(quantity) || quantity <= 0) {
     throw new AppError('stockQuantityPositive');
   }
 
-  await adjustStock(productId, quantity);
+  await adjustStock(productId, quantity, reason);
+}
+
+export async function updateStockAdjustmentReason(adjustmentId: string, reason: string): Promise<void> {
+  const database = await getDatabase();
+  const normalizedReason = reason.trim() || null;
+  const result = await database.runAsync(
+    `UPDATE stock_adjustments
+     SET reason = ?
+     WHERE id = ?;`,
+    normalizedReason,
+    adjustmentId
+  );
+
+  if (result.changes !== 1) {
+    throw new AppError('stockAdjustmentMissing');
+  }
 }
 
 export async function listStockHistory(limit = 50): Promise<StockHistoryEntry[]> {
