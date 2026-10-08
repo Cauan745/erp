@@ -1,2 +1,2 @@
-export { createProduct, findProductByBarcode, listProducts } from './product/repository';
-export { checkout, listSales } from './sale/repository';
+export { addProductStock, createProduct, findProductByBarcode, listProducts } from './product/repository';
+export { checkout, InsufficientStockError, listSales } from './sale/repository';

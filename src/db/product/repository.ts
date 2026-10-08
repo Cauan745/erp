@@ -50,8 +50,8 @@ export async function createProduct(input: Omit<Product, 'id' | 'createdAt'>): P
   if (!name) {
     throw new Error('Product name is required.');
   }
-  if (!Number.isSafeInteger(stock) || stock < 0) {
-    throw new Error('Product stock must be a non-negative integer.');
+  if (!Number.isSafeInteger(stock)) {
+    throw new Error('Product stock must be an integer.');
   }
 
   const product: Product = {
@@ -95,4 +95,24 @@ export async function findProductByBarcode(barcode: string): Promise<Product | n
   `, normalizedBarcode);
 
   return row ? productFromRow(row) : null;
+}
+
+export async function addProductStock(productId: string, quantity = 1): Promise<void> {
+  if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+    throw new Error('Stock quantity must be a positive integer.');
+  }
+
+  const database = await getDatabase();
+  const result = await database.runAsync(
+    `UPDATE products
+     SET stock = stock + ?, updated_at = ?
+     WHERE id = ?;`,
+    quantity,
+    new Date().toISOString(),
+    productId
+  );
+
+  if (result.changes !== 1) {
+    throw new Error('Product no longer exists.');
+  }
 }

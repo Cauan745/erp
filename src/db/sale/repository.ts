@@ -33,6 +33,23 @@ type SaleLineRecord = SaleLine & {
   lineTotalCents: number;
 };
 
+export type StockShortage = {
+  productId: string;
+  productName: string;
+  available: number;
+  requested: number;
+};
+
+export class InsufficientStockError extends Error {
+  readonly shortage: StockShortage;
+
+  constructor(shortage: StockShortage) {
+    super(`${shortage.productName} has only ${shortage.available} item(s) in stock.`);
+    this.name = 'InsufficientStockError';
+    this.shortage = shortage;
+  }
+}
+
 const id = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const lineFromRow = (row: SaleItemRow): SaleLine => ({
@@ -86,7 +103,10 @@ export async function listSales(): Promise<Sale[]> {
   }));
 }
 
-export async function checkout(lines: SaleLine[]): Promise<Sale> {
+export async function checkout(
+  lines: SaleLine[],
+  options: { allowInsufficientStock?: boolean } = {}
+): Promise<Sale> {
   if (!lines.length) {
     throw new Error('Cannot complete an empty sale.');
   }
@@ -119,8 +139,13 @@ export async function checkout(lines: SaleLine[]): Promise<Sale> {
       if (!product) {
         throw new Error(`Product ${productId} no longer exists.`);
       }
-      if (product.stock < quantity) {
-        throw new Error(`${product.name} has only ${product.stock} item(s) in stock.`);
+      if (product.stock < quantity && !options.allowInsufficientStock) {
+        throw new InsufficientStockError({
+          productId: product.id,
+          productName: product.name,
+          available: product.stock,
+          requested: quantity
+        });
       }
 
       const lineTotalCents = product.price_cents * quantity;
@@ -140,15 +165,24 @@ export async function checkout(lines: SaleLine[]): Promise<Sale> {
     const totalCents = saleLineRecords.reduce((sum, line) => sum + line.lineTotalCents, 0);
 
     for (const line of saleLineRecords) {
-      const result = await transaction.runAsync(
-        `UPDATE products
-         SET stock = stock - ?, updated_at = ?
-         WHERE id = ? AND stock >= ?;`,
-        line.quantity,
-        createdAt,
-        line.productId,
-        line.quantity
-      );
+      const result = options.allowInsufficientStock
+        ? await transaction.runAsync(
+          `UPDATE products
+           SET stock = stock - ?, updated_at = ?
+           WHERE id = ?;`,
+          line.quantity,
+          createdAt,
+          line.productId
+        )
+        : await transaction.runAsync(
+          `UPDATE products
+           SET stock = stock - ?, updated_at = ?
+           WHERE id = ? AND stock >= ?;`,
+          line.quantity,
+          createdAt,
+          line.productId,
+          line.quantity
+        );
 
       if (result.changes !== 1) {
         throw new Error(`Unable to reserve stock for ${line.name}.`);

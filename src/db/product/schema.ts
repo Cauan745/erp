@@ -5,10 +5,31 @@ export const CREATE_PRODUCTS_TABLE = `
     barcode TEXT,
     category TEXT NOT NULL DEFAULT 'General',
     price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
-    stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0),
+    stock INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
+`;
+
+export const MIGRATE_PRODUCTS_TO_ALLOW_NEGATIVE_STOCK = `
+  CREATE TABLE products_without_stock_check (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    barcode TEXT,
+    category TEXT NOT NULL DEFAULT 'General',
+    price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
+    stock INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  INSERT INTO products_without_stock_check
+    (id, name, barcode, category, price_cents, stock, updated_at, created_at)
+  SELECT id, name, barcode, category, price_cents, stock, updated_at, created_at
+  FROM products;
+
+  DROP TABLE products;
+  ALTER TABLE products_without_stock_check RENAME TO products;
 `;
 
 export const CREATE_PRODUCT_INDEXES = `

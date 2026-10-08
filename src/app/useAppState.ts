@@ -1,7 +1,15 @@
 import { Alert } from 'react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { checkout, createProduct, findProductByBarcode, listProducts, listSales } from '../db';
+import {
+  addProductStock,
+  checkout,
+  createProduct,
+  findProductByBarcode,
+  InsufficientStockError,
+  listProducts,
+  listSales
+} from '../db';
 import { Product } from '../db/product/types';
 import { Sale, SaleLine } from '../db/sale/types';
 import { errorMessage } from '../formatters';
@@ -158,16 +166,47 @@ export function useAppState() {
     }
   };
 
-  const completeCheckout = async () => {
+  const retryCheckoutAfterAddingStock = async (productId: string) => {
+    try {
+      await addProductStock(productId);
+      await refresh();
+    } catch (error) {
+      Alert.alert('Could not add stock', errorMessage(error));
+      return;
+    }
+
+    await completeCheckout();
+  };
+
+  const completeCheckout = async (allowInsufficientStock = false): Promise<void> => {
     if (!cartLines.length) return;
     try {
-      await checkout(cartLines);
+      await checkout(cartLines, { allowInsufficientStock });
       setCart({});
       setCheckoutOpen(false);
       setCartOpen(false);
       await refresh();
       showNotice('Sale saved on this device');
     } catch (error) {
+      if (error instanceof InsufficientStockError) {
+        const { shortage } = error;
+        Alert.alert(
+          'Not enough stock',
+          `${shortage.productName} has ${shortage.available} in stock, but this cart needs ${shortage.requested}.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Add 1 to stock',
+              onPress: () => { void retryCheckoutAfterAddingStock(shortage.productId); }
+            },
+            {
+              text: 'Sell anyway',
+              onPress: () => { void completeCheckout(true); }
+            }
+          ]
+        );
+        return;
+      }
       Alert.alert('Could not complete sale', errorMessage(error));
     }
   };
