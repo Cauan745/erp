@@ -7,9 +7,10 @@ import {
   SEED_PRODUCTS
 } from './product/schema';
 import { CREATE_SALES_TABLE, CREATE_SALE_INDEXES } from './sale/schema';
+import { CREATE_STOCK_ADJUSTMENTS_TABLE, CREATE_STOCK_ADJUSTMENT_INDEXES } from './stock/schema';
 
 const DATABASE_NAME = 'stockroom';
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | undefined;
 
@@ -35,8 +36,10 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
             CREATE_PRODUCTS_TABLE,
             CREATE_SALES_TABLE,
             needsStockConstraintMigration ? MIGRATE_PRODUCTS_TO_ALLOW_NEGATIVE_STOCK : '',
+            CREATE_STOCK_ADJUSTMENTS_TABLE,
             CREATE_PRODUCT_INDEXES,
-            CREATE_SALE_INDEXES
+            CREATE_SALE_INDEXES,
+            CREATE_STOCK_ADJUSTMENT_INDEXES
           ].join('\n'));
 
           for (const product of SEED_PRODUCTS) {

@@ -8,6 +8,7 @@ An Expo + React Native + TypeScript local-first ERP slice.
 - Barcode scanning with `react-native-vision-camera` for EAN/UPC/Code 128 formats.
 - Product lookup, add-to-cart, quantity changes, and cash checkout.
 - Local sales history and stock decrement after checkout, with an explicit override for negative stock.
+- Manual stock adjustments with optional reasons and combined stock history.
 - A path for non-barcode products: products can be created without a barcode.
 
 ## Run it

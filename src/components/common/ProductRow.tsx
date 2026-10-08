@@ -7,10 +7,11 @@ import { styles } from '../../styles';
 type ProductRowProps = {
   product: Product;
   onPress?: () => void;
+  onStockUpdate?: () => void;
   compact?: boolean;
 };
 
-export function ProductRow({ product, onPress, compact = false }: ProductRowProps) {
+export function ProductRow({ product, onPress, onStockUpdate, compact = false }: ProductRowProps) {
   const body = (
     <View style={[styles.productRow, compact && styles.productRowCompact]}>
       <View style={styles.productMark}>
@@ -22,7 +23,16 @@ export function ProductRow({ product, onPress, compact = false }: ProductRowProp
       </View>
       <View style={styles.productRight}>
         <Text style={styles.productPrice}>{money(product.price)}</Text>
-        {onPress ? <Text style={styles.addHint}>Add +</Text> : <Text style={styles.muted}>{product.stock} in stock</Text>}
+        {onPress ? <Text style={styles.addHint}>Add +</Text> : (
+          <>
+            <Text style={styles.muted}>{product.stock} in stock</Text>
+            {onStockUpdate ? (
+              <Pressable onPress={onStockUpdate} hitSlop={8}>
+                <Text style={styles.addHint}>Adjust stock</Text>
+              </Pressable>
+            ) : null}
+          </>
+        )}
       </View>
     </View>
   );

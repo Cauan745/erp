@@ -2,6 +2,8 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput,
 
 import { colors } from '../../constants';
 import { Product } from '../../db/product/types';
+import { StockHistoryEntry } from '../../db/stock/types';
+import { shortDate } from '../../formatters';
 import { styles } from '../../styles';
 import { ProductForm, SetProductForm } from '../../types';
 import { Field } from '../common/Field';
@@ -13,9 +15,19 @@ type ProductsTabProps = {
   setForm: SetProductForm;
   onSave: () => void;
   onScan: () => void;
+  onOpenStockAdjustment: (productId: string) => void;
+  stockHistory: StockHistoryEntry[];
 };
 
-export function ProductsTab({ products, form, setForm, onSave, onScan }: ProductsTabProps) {
+export function ProductsTab({
+  products,
+  form,
+  setForm,
+  onSave,
+  onScan,
+  onOpenStockAdjustment,
+  stockHistory
+}: ProductsTabProps) {
   return (
     <KeyboardAvoidingView style={styles.content} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
@@ -63,7 +75,34 @@ export function ProductsTab({ products, form, setForm, onSave, onScan }: Product
           <Text style={styles.listTitle}>CATALOGUE</Text>
           <Text style={styles.muted}>{products.length} products</Text>
         </View>
-        {products.map((product) => <ProductRow key={product.id} product={product} compact />)}
+        {products.map((product) => (
+          <ProductRow
+            key={product.id}
+            product={product}
+            compact
+            onStockUpdate={() => onOpenStockAdjustment(product.id)}
+          />
+        ))}
+
+        <View style={styles.historySection}>
+          <View style={styles.listHeader}>
+            <Text style={styles.listTitle}>STOCK HISTORY</Text>
+            <Text style={styles.muted}>Recent changes</Text>
+          </View>
+          {stockHistory.length ? stockHistory.map((entry) => (
+            <View style={styles.stockHistoryCard} key={`${entry.source}-${entry.id}`}>
+              <View style={styles.stockHistoryInfo}>
+                <Text style={styles.productName}>{entry.productName}</Text>
+                <Text style={styles.muted}>
+                  {entry.source === 'sale' ? 'Sale' : entry.reason || 'No reason'} · {shortDate(entry.createdAt)}
+                </Text>
+              </View>
+              <Text style={[styles.stockHistoryQuantity, entry.quantity < 0 && styles.stockHistoryDecrease]}>
+                {entry.quantity > 0 ? '+' : ''}{entry.quantity}
+              </Text>
+            </View>
+          )) : <Text style={styles.muted}>Stock changes will appear here.</Text>}
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );

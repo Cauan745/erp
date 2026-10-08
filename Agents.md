@@ -46,6 +46,8 @@ Do not reintroduce RxDB or its storage plugin unless the user explicitly asks fo
 - Checkout must remain transactional. It validates stock, decrements stock, inserts the sale, and inserts sale items as one operation.
 - Sale items must keep product name and price snapshots so sale history remains stable after a product changes.
 - Keep stock validation for normal checkout, but allow the explicit "Sell anyway" override to make stock negative.
+- Store manual signed stock changes in `stock_adjustments`; each manual change must update `products.stock` and insert its history row in one transaction.
+- Do not copy sale stock changes into `stock_adjustments`. Combine sales and manual adjustments when displaying stock history.
 
 ## Native and platform rules
 

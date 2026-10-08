@@ -8,10 +8,13 @@ import {
   findProductByBarcode,
   InsufficientStockError,
   listProducts,
-  listSales
+  listSales,
+  listStockHistory,
+  adjustStock
 } from '../db';
 import { Product } from '../db/product/types';
 import { Sale, SaleLine } from '../db/sale/types';
+import { StockHistoryEntry } from '../db/stock/types';
 import { errorMessage } from '../formatters';
 import { Cart, ProductForm, SetProductForm, Tab } from '../types';
 
@@ -26,6 +29,7 @@ export function useAppState() {
   const [tab, setTab] = useState<Tab>('sell');
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
+  const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
   const [cart, setCart] = useState<Cart>({});
   const [search, setSearch] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -36,12 +40,18 @@ export function useAppState() {
   const [loading, setLoading] = useState(true);
   const [startupError, setStartupError] = useState<string | null>(null);
   const [productForm, setProductForm] = useState<ProductForm>(emptyProductForm);
+  const [stockAdjustmentProductId, setStockAdjustmentProductId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [nextProducts, nextSales] = await Promise.all([listProducts(), listSales()]);
+      const [nextProducts, nextSales, nextStockHistory] = await Promise.all([
+        listProducts(),
+        listSales(),
+        listStockHistory()
+      ]);
       setProducts(nextProducts);
       setSales(nextSales);
+      setStockHistory(nextStockHistory);
       setStartupError(null);
       setLoading(false);
     } catch (error) {
@@ -66,6 +76,10 @@ export function useAppState() {
       `${product.name} ${product.barcode} ${product.category}`.toLowerCase().includes(term)
     );
   }, [products, search]);
+  const stockAdjustmentProduct = useMemo(
+    () => products.find((product) => product.id === stockAdjustmentProductId) ?? null,
+    [products, stockAdjustmentProductId]
+  );
 
   const showNotice = (message: string) => {
     setNotice(message);
@@ -166,6 +180,25 @@ export function useAppState() {
     }
   };
 
+  const saveStockAdjustment = async (quantityInput: string, reason: string) => {
+    if (!stockAdjustmentProductId) return;
+
+    const quantity = Number(quantityInput.trim());
+    if (!Number.isSafeInteger(quantity) || quantity === 0) {
+      Alert.alert('Check stock change', 'Enter a non-zero whole number. Use a negative number to remove stock.');
+      return;
+    }
+
+    try {
+      await adjustStock(stockAdjustmentProductId, quantity, reason);
+      setStockAdjustmentProductId(null);
+      await refresh();
+      showNotice('Stock updated on this device');
+    } catch (error) {
+      Alert.alert('Could not update stock', errorMessage(error));
+    }
+  };
+
   const retryCheckoutAfterAddingStock = async (productId: string) => {
     try {
       await addProductStock(productId);
@@ -222,6 +255,7 @@ export function useAppState() {
     setTab,
     products,
     sales,
+    stockHistory,
     productForm,
     setProductForm: setProductForm as SetProductForm,
     filteredProducts,
@@ -237,12 +271,17 @@ export function useAppState() {
     setScannerOpen,
     setCartOpen,
     setCheckoutOpen,
+    stockAdjustmentProduct,
+    stockAdjustmentOpen: Boolean(stockAdjustmentProductId),
+    openStockAdjustment: setStockAdjustmentProductId,
+    closeStockAdjustment: () => setStockAdjustmentProductId(null),
     openScanner,
     addToCart,
     updateQuantity,
     onBarcode,
     saveProduct,
     completeCheckout,
+    saveStockAdjustment,
     loading,
     startupError,
     retry

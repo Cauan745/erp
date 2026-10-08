@@ -96,23 +96,3 @@ export async function findProductByBarcode(barcode: string): Promise<Product | n
 
   return row ? productFromRow(row) : null;
 }
-
-export async function addProductStock(productId: string, quantity = 1): Promise<void> {
-  if (!Number.isSafeInteger(quantity) || quantity <= 0) {
-    throw new Error('Stock quantity must be a positive integer.');
-  }
-
-  const database = await getDatabase();
-  const result = await database.runAsync(
-    `UPDATE products
-     SET stock = stock + ?, updated_at = ?
-     WHERE id = ?;`,
-    quantity,
-    new Date().toISOString(),
-    productId
-  );
-
-  if (result.changes !== 1) {
-    throw new Error('Product no longer exists.');
-  }
-}

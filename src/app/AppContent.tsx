@@ -7,6 +7,7 @@ import { StartupScreen } from '../components/StartupScreen';
 import { CartModal } from '../components/modals/CartModal';
 import { CheckoutModal } from '../components/modals/CheckoutModal';
 import { ScannerModal } from '../components/modals/ScannerModal';
+import { StockUpdateModal } from '../components/modals/StockUpdateModal';
 import { TabBar } from '../components/navigation/TabBar';
 import { ProductsTab } from '../components/tabs/ProductsTab';
 import { SalesTab } from '../components/tabs/SalesTab';
@@ -58,6 +59,8 @@ export function AppContent() {
             setForm={app.setProductForm}
             onSave={app.saveProduct}
             onScan={() => app.openScanner('product')}
+            onOpenStockAdjustment={app.openStockAdjustment}
+            stockHistory={app.stockHistory}
           />
         )}
         {app.tab === 'sales' && <SalesTab sales={app.sales} />}
@@ -88,6 +91,12 @@ export function AppContent() {
         total={app.cartTotal}
         onClose={() => app.setCheckoutOpen(false)}
         onConfirm={app.completeCheckout}
+      />
+      <StockUpdateModal
+        visible={app.stockAdjustmentOpen}
+        product={app.stockAdjustmentProduct}
+        onClose={app.closeStockAdjustment}
+        onSubmit={app.saveStockAdjustment}
       />
     </SafeAreaView>
   );
