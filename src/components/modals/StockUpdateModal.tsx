@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '../../constants';
 import { Product } from '../../db/product/types';
+import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
 
 type StockUpdateModalProps = {
@@ -15,6 +16,7 @@ type StockUpdateModalProps = {
 
 export function StockUpdateModal({ visible, product, onClose, onSubmit }: StockUpdateModalProps) {
   const insets = useSafeAreaInsets();
+  const { t } = useI18n();
   const [quantity, setQuantity] = useState('');
   const [reason, setReason] = useState('');
 
@@ -29,37 +31,37 @@ export function StockUpdateModal({ visible, product, onClose, onSubmit }: StockU
     <Modal visible={visible && Boolean(product)} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
         <View style={[styles.checkoutCard, { marginBottom: 20 + insets.bottom }]}>
-          <Text style={styles.eyebrow}>INVENTORY</Text>
-          <Text style={styles.modalTitle}>Adjust stock</Text>
+          <Text style={styles.eyebrow}>{t('stock.inventory')}</Text>
+          <Text style={styles.modalTitle}>{t('stock.adjust')}</Text>
           <Text style={styles.muted}>{product?.name}</Text>
-          <Text style={styles.stockUpdateCurrent}>Current stock: {product?.stock}</Text>
+          <Text style={styles.stockUpdateCurrent}>{t('stock.current', { count: product?.stock ?? 0 })}</Text>
 
-          <Text style={styles.fieldLabel}>Stock change</Text>
+          <Text style={styles.fieldLabel}>{t('stock.change')}</Text>
           <TextInput
             value={quantity}
             onChangeText={setQuantity}
-            placeholder="+1 or -1"
+            placeholder={t('stock.changePlaceholder')}
             placeholderTextColor={colors.muted}
             keyboardType="numbers-and-punctuation"
             style={styles.input}
             autoFocus
           />
-          <Text style={styles.stockUpdateHint}>Use a positive number to add stock or a negative number to remove it.</Text>
+          <Text style={styles.stockUpdateHint}>{t('stock.changeHint')}</Text>
 
-          <Text style={styles.fieldLabel}>Reason <Text style={styles.optional}>(optional)</Text></Text>
+          <Text style={styles.fieldLabel}>{t('stock.reason')} <Text style={styles.optional}>({t('common.optional')})</Text></Text>
           <TextInput
             value={reason}
             onChangeText={setReason}
-            placeholder="e.g. Delivery received"
+            placeholder={t('stock.reasonPlaceholder')}
             placeholderTextColor={colors.muted}
             style={styles.input}
           />
 
           <Pressable style={styles.primaryButton} onPress={() => onSubmit(quantity, reason)}>
-            <Text style={styles.primaryButtonText}>Save stock change</Text>
+            <Text style={styles.primaryButtonText}>{t('stock.saveChange')}</Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={onClose}>
-            <Text style={styles.secondaryButtonText}>Cancel</Text>
+            <Text style={styles.secondaryButtonText}>{t('common.cancel')}</Text>
           </Pressable>
         </View>
       </View>

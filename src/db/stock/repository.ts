@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
 import { getDatabase } from '../db';
+import { AppError } from '../../errors';
 import { StockHistoryEntry } from './types';
 
 type StockHistoryRow = {
@@ -29,7 +30,7 @@ async function runInTransaction(
 
 export async function adjustStock(productId: string, quantity: number, reason?: string): Promise<void> {
   if (!Number.isSafeInteger(quantity) || quantity === 0) {
-    throw new Error('Stock changes must be non-zero integers.');
+    throw new AppError('stockChangeInteger');
   }
 
   const database = await getDatabase();
@@ -47,7 +48,7 @@ export async function adjustStock(productId: string, quantity: number, reason?: 
     );
 
     if (result.changes !== 1) {
-      throw new Error('Product no longer exists.');
+      throw new AppError('productMissing');
     }
 
     await transaction.runAsync(
@@ -64,7 +65,7 @@ export async function adjustStock(productId: string, quantity: number, reason?: 
 
 export async function addProductStock(productId: string, quantity = 1): Promise<void> {
   if (!Number.isSafeInteger(quantity) || quantity <= 0) {
-    throw new Error('Stock quantity must be a positive integer.');
+    throw new AppError('stockQuantityPositive');
   }
 
   await adjustStock(productId, quantity);

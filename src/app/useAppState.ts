@@ -16,16 +16,18 @@ import { Product } from '../db/product/types';
 import { Sale, SaleLine } from '../db/sale/types';
 import { StockHistoryEntry } from '../db/stock/types';
 import { errorMessage } from '../formatters';
+import { useI18n } from '../i18n';
 import { Cart, ProductForm, SetProductForm, Tab } from '../types';
 
 const emptyProductForm: ProductForm = {
   name: '',
   price: '',
   barcode: '',
-  category: 'General'
+  category: ''
 };
 
 export function useAppState() {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('sell');
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -56,7 +58,7 @@ export function useAppState() {
       setLoading(false);
     } catch (error) {
       console.error('Local database startup failed', error);
-      setStartupError(errorMessage(error));
+      setStartupError(errorMessage(error, t));
       setLoading(false);
       throw error;
     }
@@ -101,7 +103,7 @@ export function useAppState() {
         }
       };
     });
-    showNotice(`${product.name} added`);
+    showNotice(t('alerts.productAdded', { productName: product.name }));
   };
 
   const updateQuantity = (line: SaleLine, delta: number) => {
@@ -128,7 +130,7 @@ export function useAppState() {
     setScannerOpen(false);
     if (scannerPurpose === 'product') {
       setProductForm((current) => ({ ...current, barcode }));
-      showNotice('Barcode captured');
+      showNotice(t('alerts.barcodeCaptured'));
       return;
     }
 
@@ -140,14 +142,14 @@ export function useAppState() {
         return;
       }
     } catch (error) {
-      Alert.alert('Product lookup failed', errorMessage(error));
+      Alert.alert(t('alerts.lookupFailedTitle'), errorMessage(error, t));
       return;
     }
 
-    Alert.alert('Product not found', `No product is registered for ${barcode}.`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('alerts.productNotFoundTitle'), t('alerts.productNotFoundMessage', { barcode }), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Add product',
+        text: t('alerts.addProduct'),
         onPress: () => {
           setTab('products');
           setProductForm((current) => ({ ...current, barcode }));
@@ -160,7 +162,7 @@ export function useAppState() {
     const name = productForm.name.trim();
     const price = Number(productForm.price.replace(',', '.'));
     if (!name || !Number.isFinite(price) || price < 0) {
-      Alert.alert('Check product details', 'Enter a product name and a valid price.');
+      Alert.alert(t('alerts.checkProductDetailsTitle'), t('alerts.checkProductDetailsMessage'));
       return;
     }
 
@@ -169,14 +171,14 @@ export function useAppState() {
         name,
         price,
         barcode: productForm.barcode.trim(),
-        category: productForm.category.trim() || 'General',
+        category: productForm.category.trim() || t('products.categoryPlaceholder'),
         stock: 0
       });
       setProductForm(emptyProductForm);
       await refresh();
-      showNotice('Product saved locally');
+      showNotice(t('alerts.productSaved'));
     } catch (error) {
-      Alert.alert('Could not save product', errorMessage(error));
+      Alert.alert(t('alerts.saveProductFailedTitle'), errorMessage(error, t));
     }
   };
 
@@ -185,7 +187,7 @@ export function useAppState() {
 
     const quantity = Number(quantityInput.trim());
     if (!Number.isSafeInteger(quantity) || quantity === 0) {
-      Alert.alert('Check stock change', 'Enter a non-zero whole number. Use a negative number to remove stock.');
+      Alert.alert(t('alerts.checkStockChangeTitle'), t('alerts.checkStockChangeMessage'));
       return;
     }
 
@@ -193,9 +195,9 @@ export function useAppState() {
       await adjustStock(stockAdjustmentProductId, quantity, reason);
       setStockAdjustmentProductId(null);
       await refresh();
-      showNotice('Stock updated on this device');
+      showNotice(t('alerts.stockUpdated'));
     } catch (error) {
-      Alert.alert('Could not update stock', errorMessage(error));
+      Alert.alert(t('alerts.updateStockFailedTitle'), errorMessage(error, t));
     }
   };
 
@@ -204,7 +206,7 @@ export function useAppState() {
       await addProductStock(productId);
       await refresh();
     } catch (error) {
-      Alert.alert('Could not add stock', errorMessage(error));
+      Alert.alert(t('alerts.addStockFailedTitle'), errorMessage(error, t));
       return;
     }
 
@@ -219,28 +221,28 @@ export function useAppState() {
       setCheckoutOpen(false);
       setCartOpen(false);
       await refresh();
-      showNotice('Sale saved on this device');
+      showNotice(t('alerts.saleSaved'));
     } catch (error) {
       if (error instanceof InsufficientStockError) {
         const { shortage } = error;
         Alert.alert(
-          'Not enough stock',
-          `${shortage.productName} has ${shortage.available} in stock, but this cart needs ${shortage.requested}.`,
+          t('alerts.notEnoughStockTitle'),
+          t('alerts.notEnoughStockMessage', shortage),
           [
-            { text: 'Cancel', style: 'cancel' },
+            { text: t('common.cancel'), style: 'cancel' },
             {
-              text: 'Add 1 to stock',
+              text: t('alerts.addOneToStock'),
               onPress: () => { void retryCheckoutAfterAddingStock(shortage.productId); }
             },
             {
-              text: 'Sell anyway',
+              text: t('sell.sellAnyway'),
               onPress: () => { void completeCheckout(true); }
             }
           ]
         );
         return;
       }
-      Alert.alert('Could not complete sale', errorMessage(error));
+      Alert.alert(t('alerts.completeSaleFailedTitle'), errorMessage(error, t));
     }
   };
 

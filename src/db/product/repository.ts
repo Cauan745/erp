@@ -1,5 +1,6 @@
 import { Product } from './types';
 import { getDatabase } from '../db';
+import { AppError } from '../../errors';
 
 type ProductRow = {
   id: string;
@@ -13,7 +14,7 @@ type ProductRow = {
 
 const centsFromPrice = (price: number) => {
   if (!Number.isFinite(price) || price < 0) {
-    throw new Error('Product price must be a non-negative number.');
+    throw new AppError('productPrice');
   }
 
   return Math.round(price * 100);
@@ -48,10 +49,10 @@ export async function createProduct(input: Omit<Product, 'id' | 'createdAt'>): P
   const stock = Math.trunc(input.stock);
 
   if (!name) {
-    throw new Error('Product name is required.');
+    throw new AppError('productNameRequired');
   }
   if (!Number.isSafeInteger(stock)) {
-    throw new Error('Product stock must be an integer.');
+    throw new AppError('productStockInteger');
   }
 
   const product: Product = {

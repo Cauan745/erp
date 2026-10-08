@@ -2,6 +2,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { Product } from '../../db/product/types';
 import { money } from '../../formatters';
+import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
 
 type ProductRowProps = {
@@ -12,6 +13,8 @@ type ProductRowProps = {
 };
 
 export function ProductRow({ product, onPress, onStockUpdate, compact = false }: ProductRowProps) {
+  const { locale, t } = useI18n();
+
   const body = (
     <View style={[styles.productRow, compact && styles.productRowCompact]}>
       <View style={styles.productMark}>
@@ -19,16 +22,16 @@ export function ProductRow({ product, onPress, onStockUpdate, compact = false }:
       </View>
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{product.name}</Text>
-        <Text style={styles.muted}>{product.category} · {product.barcode || 'No barcode'}</Text>
+        <Text style={styles.muted}>{product.category} · {product.barcode || t('common.noBarcode')}</Text>
       </View>
       <View style={styles.productRight}>
-        <Text style={styles.productPrice}>{money(product.price)}</Text>
-        {onPress ? <Text style={styles.addHint}>Add +</Text> : (
+        <Text style={styles.productPrice}>{money(product.price, locale)}</Text>
+        {onPress ? <Text style={styles.addHint}>{t('common.add')}</Text> : (
           <>
-            <Text style={styles.muted}>{product.stock} in stock</Text>
+            <Text style={styles.muted}>{t('common.inStock', { count: product.stock })}</Text>
             {onStockUpdate ? (
               <Pressable onPress={onStockUpdate} hitSlop={8}>
-                <Text style={styles.addHint}>Adjust stock</Text>
+                <Text style={styles.addHint}>{t('common.adjustStock')}</Text>
               </Pressable>
             ) : null}
           </>

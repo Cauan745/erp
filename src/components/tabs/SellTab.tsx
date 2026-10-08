@@ -2,6 +2,7 @@ import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
 
 import { colors } from '../../constants';
 import { money } from '../../formatters';
+import { useI18n } from '../../i18n';
 import { Product } from '../../db/product/types';
 import { styles } from '../../styles';
 import { EmptyState } from '../common/EmptyState';
@@ -28,16 +29,18 @@ export function SellTab({
   cartTotal,
   onOpenCart
 }: SellTabProps) {
+  const { locale, t } = useI18n();
+
   return (
     <View style={styles.content}>
       <View style={styles.heroRow}>
         <View>
-          <Text style={styles.sectionKicker}>QUICK SALE</Text>
-          <Text style={styles.sectionTitle}>Build a cart</Text>
+          <Text style={styles.sectionKicker}>{t('sell.quickSale')}</Text>
+          <Text style={styles.sectionTitle}>{t('sell.buildCart')}</Text>
         </View>
         <Pressable style={styles.scanButton} onPress={onScan}>
           <Text style={styles.scanIcon}>⌁</Text>
-          <Text style={styles.scanButtonText}>Scan</Text>
+          <Text style={styles.scanButtonText}>{t('sell.scan')}</Text>
         </Pressable>
       </View>
 
@@ -46,15 +49,15 @@ export function SellTab({
         <TextInput
           value={search}
           onChangeText={onSearchChange}
-          placeholder="Search products or barcode"
+          placeholder={t('sell.searchPlaceholder')}
           placeholderTextColor={colors.muted}
           style={styles.searchInput}
         />
       </View>
 
       <View style={styles.listHeader}>
-        <Text style={styles.listTitle}>{search ? 'MATCHES' : 'ALL PRODUCTS'}</Text>
-        <Text style={styles.muted}>{products.length} items</Text>
+        <Text style={styles.listTitle}>{search ? t('sell.matches') : t('sell.allProducts')}</Text>
+        <Text style={styles.muted}>{t('common.itemCount', { count: products.length })}</Text>
       </View>
 
       <FlatList
@@ -62,16 +65,16 @@ export function SellTab({
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => <ProductRow product={item} onPress={() => onAddToCart(item)} />}
-        ListEmptyComponent={<EmptyState text="No products match your search." />}
+        ListEmptyComponent={<EmptyState text={t('sell.noProductsMatch')} />}
       />
 
       {cartQuantity > 0 ? (
         <Pressable style={styles.cartBar} onPress={onOpenCart}>
           <View>
-            <Text style={styles.cartBarLabel}>{cartQuantity} {cartQuantity === 1 ? 'item' : 'items'} in cart</Text>
-            <Text style={styles.cartBarTotal}>{money(cartTotal)}</Text>
+            <Text style={styles.cartBarLabel}>{t('sell.itemsInCart', { count: cartQuantity })}</Text>
+            <Text style={styles.cartBarTotal}>{money(cartTotal, locale)}</Text>
           </View>
-          <Text style={styles.cartBarAction}>Review cart  →</Text>
+          <Text style={styles.cartBarAction}>{t('sell.reviewCart')}</Text>
         </Pressable>
       ) : null}
     </View>

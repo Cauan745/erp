@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
 import { getDatabase } from '../db';
+import { AppError } from '../../errors';
 import { Sale, SaleLine } from './types';
 
 type SaleRow = {
@@ -40,11 +41,11 @@ export type StockShortage = {
   requested: number;
 };
 
-export class InsufficientStockError extends Error {
+export class InsufficientStockError extends AppError {
   readonly shortage: StockShortage;
 
   constructor(shortage: StockShortage) {
-    super(`${shortage.productName} has only ${shortage.available} item(s) in stock.`);
+    super('stockReservation', { productName: shortage.productName });
     this.name = 'InsufficientStockError';
     this.shortage = shortage;
   }
@@ -108,13 +109,13 @@ export async function checkout(
   options: { allowInsufficientStock?: boolean } = {}
 ): Promise<Sale> {
   if (!lines.length) {
-    throw new Error('Cannot complete an empty sale.');
+    throw new AppError('emptySale');
   }
 
   const requestedQuantities = new Map<string, number>();
   for (const line of lines) {
     if (!Number.isSafeInteger(line.quantity) || line.quantity <= 0) {
-      throw new Error('Sale quantities must be positive integers.');
+      throw new AppError('saleQuantityPositive');
     }
 
     requestedQuantities.set(
@@ -137,7 +138,7 @@ export async function checkout(
       `, productId);
 
       if (!product) {
-        throw new Error(`Product ${productId} no longer exists.`);
+        throw new AppError('productMissing');
       }
       if (product.stock < quantity && !options.allowInsufficientStock) {
         throw new InsufficientStockError({
@@ -185,7 +186,7 @@ export async function checkout(
         );
 
       if (result.changes !== 1) {
-        throw new Error(`Unable to reserve stock for ${line.name}.`);
+        throw new AppError('stockReservation', { productName: line.name });
       }
     }
 
@@ -224,7 +225,7 @@ export async function checkout(
   });
 
   if (!completedSale) {
-    throw new Error('Sale transaction completed without a sale.');
+    throw new AppError('saleTransaction');
   }
 
   return completedSale;

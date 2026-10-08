@@ -4,6 +4,7 @@ import { colors } from '../../constants';
 import { Product } from '../../db/product/types';
 import { StockHistoryEntry } from '../../db/stock/types';
 import { shortDate } from '../../formatters';
+import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
 import { ProductForm, SetProductForm } from '../../types';
 import { Field } from '../common/Field';
@@ -28,52 +29,54 @@ export function ProductsTab({
   onOpenStockAdjustment,
   stockHistory
 }: ProductsTabProps) {
+  const { locale, t } = useI18n();
+
   return (
     <KeyboardAvoidingView style={styles.content} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <Text style={styles.sectionKicker}>CATALOG</Text>
-        <Text style={styles.sectionTitle}>Add a product</Text>
-        <Text style={styles.muted}>Products are available immediately in this device’s local catalog.</Text>
+        <Text style={styles.sectionKicker}>{t('products.catalog')}</Text>
+        <Text style={styles.sectionTitle}>{t('products.addProduct')}</Text>
+        <Text style={styles.muted}>{t('products.localCatalogDescription')}</Text>
 
         <Field
-          label="Product name"
+          label={t('products.productName')}
           value={form.name}
-          placeholder="e.g. Reusable bottle"
+          placeholder={t('products.productNamePlaceholder')}
           onChangeText={(name) => setForm((current) => ({ ...current, name }))}
         />
         <Field
-          label="Price"
+          label={t('products.price')}
           value={form.price}
-          placeholder="0,00"
+          placeholder={t('products.pricePlaceholder')}
           keyboardType="decimal-pad"
           onChangeText={(price) => setForm((current) => ({ ...current, price }))}
         />
 
         <View style={styles.fieldLabelRow}>
-          <Text style={styles.fieldLabel}>Barcode <Text style={styles.optional}>(optional)</Text></Text>
-          <Pressable onPress={onScan}><Text style={styles.linkText}>Scan barcode</Text></Pressable>
+          <Text style={styles.fieldLabel}>{t('products.barcode')} <Text style={styles.optional}>({t('common.optional')})</Text></Text>
+          <Pressable onPress={onScan}><Text style={styles.linkText}>{t('products.scanBarcode')}</Text></Pressable>
         </View>
         <TextInput
           value={form.barcode}
-          placeholder="Type or scan a barcode"
+          placeholder={t('products.barcodePlaceholder')}
           placeholderTextColor={colors.muted}
           style={styles.input}
           onChangeText={(barcode) => setForm((current) => ({ ...current, barcode }))}
         />
 
         <Field
-          label="Category"
+          label={t('products.category')}
           value={form.category}
-          placeholder="General"
+          placeholder={t('products.categoryPlaceholder')}
           onChangeText={(category) => setForm((current) => ({ ...current, category }))}
         />
         <Pressable style={styles.primaryButton} onPress={onSave}>
-          <Text style={styles.primaryButtonText}>Save product locally</Text>
+          <Text style={styles.primaryButtonText}>{t('products.saveLocally')}</Text>
         </Pressable>
 
         <View style={styles.listHeader}>
-          <Text style={styles.listTitle}>CATALOGUE</Text>
-          <Text style={styles.muted}>{products.length} products</Text>
+          <Text style={styles.listTitle}>{t('products.catalogue')}</Text>
+          <Text style={styles.muted}>{t('common.productCount', { count: products.length })}</Text>
         </View>
         {products.map((product) => (
           <ProductRow
@@ -86,22 +89,22 @@ export function ProductsTab({
 
         <View style={styles.historySection}>
           <View style={styles.listHeader}>
-            <Text style={styles.listTitle}>STOCK HISTORY</Text>
-            <Text style={styles.muted}>Recent changes</Text>
+            <Text style={styles.listTitle}>{t('products.stockHistory')}</Text>
+            <Text style={styles.muted}>{t('products.recentChanges')}</Text>
           </View>
           {stockHistory.length ? stockHistory.map((entry) => (
             <View style={styles.stockHistoryCard} key={`${entry.source}-${entry.id}`}>
               <View style={styles.stockHistoryInfo}>
                 <Text style={styles.productName}>{entry.productName}</Text>
                 <Text style={styles.muted}>
-                  {entry.source === 'sale' ? 'Sale' : entry.reason || 'No reason'} · {shortDate(entry.createdAt)}
+                  {entry.source === 'sale' ? t('products.sale') : entry.reason || t('products.noReason')} · {shortDate(entry.createdAt, locale)}
                 </Text>
               </View>
               <Text style={[styles.stockHistoryQuantity, entry.quantity < 0 && styles.stockHistoryDecrease]}>
                 {entry.quantity > 0 ? '+' : ''}{entry.quantity}
               </Text>
             </View>
-          )) : <Text style={styles.muted}>Stock changes will appear here.</Text>}
+          )) : <Text style={styles.muted}>{t('products.noStockChanges')}</Text>}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

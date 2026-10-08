@@ -9,7 +9,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Allow Stockroom to scan product barcodes."
+        "NSCameraUsageDescription": "Permita que o Stockroom escaneie códigos de barras de produtos."
       }
     },
     "android": {
@@ -26,7 +26,7 @@
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "Allow Stockroom to scan product barcodes."
+          "cameraPermissionText": "Permita que o Stockroom escaneie códigos de barras de produtos."
         }
       ],
       "expo-sqlite"
