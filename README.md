@@ -1,30 +1,62 @@
-# Stockroom ERP MVP
+# Stockroom ERP
 
-An Expo + React Native + TypeScript local-first ERP slice.
+Stockroom is a local-first Expo and React Native sales app with a Go and PostgreSQL backend in the same repository.
 
-## Included
+## Repository layout
 
-- Local product catalogue backed by SQLite on the device.
-- Barcode scanning with `react-native-vision-camera` for EAN/UPC/Code 128 formats.
-- Product lookup, add-to-cart, quantity changes, and cash checkout.
-- Local sales history and stock decrement after checkout, with an explicit override for negative stock.
-- Manual stock adjustments with optional reasons and combined stock history.
-- A path for non-barcode products: products can be created without a barcode.
+- `app/` contains the Expo mobile client. It still uses Expo SQLite and works without the backend.
+- `backend/` contains the Go HTTP service, PostgreSQL migration, and API repository code.
+- `docker-compose.yml` starts PostgreSQL for local backend development.
 
-## Run it
+## Run the mobile app
 
 ```bash
+cd app
 npm install
 npx expo prebuild
-npx expo run:ios     # or: npx expo run:android
+npx expo run:android     # or: npx expo run:ios
 ```
 
-VisionCamera needs a native development build; the scanner will not work in the standard Expo Go client. The app can still be run on web for UI work, but camera support is native-only.
+VisionCamera needs a native development build. Expo Go cannot load the scanner module.
 
-## Storage note
+## Run the backend
 
-The MVP uses Expo SQLite directly. Products and sales are stored locally, and checkout writes stock changes and sale records in one transaction. The backend and replication layer are intentionally not included yet.
+Start PostgreSQL:
 
-## Next slice
+```bash
+docker compose up -d postgres
+```
 
-Add a backend sync adapter for products and sales, conflict rules for simultaneous product edits, user/device identity, and camera-based object recognition for products without barcodes.
+Start the API in another terminal:
+
+```bash
+cd backend
+go run ./cmd/server
+```
+
+The service listens on `http://localhost:8080`. It runs the embedded PostgreSQL migrations on startup and seeds the three sample products used by the mobile MVP. Set `DATABASE_URL` and `HTTP_ADDR` to override the defaults in `backend/.env.example`.
+
+## API endpoints
+
+The API stores money as integer cents in JSON fields such as `priceCents` and `totalCents`.
+
+- `GET /healthz`
+- `GET /api/v1/products`
+- `POST /api/v1/products`
+- `GET /api/v1/products/by-barcode?barcode=...`
+- `POST /api/v1/products/{id}/stock`
+- `GET /api/v1/stock/history?limit=50`
+- `PATCH /api/v1/stock/adjustments/{id}`
+- `GET /api/v1/sales`
+- `POST /api/v1/sales/checkout`
+
+Checkout validates stock, locks the product rows, decrements stock, stores the sale, and stores product name and price snapshots in one PostgreSQL transaction. The explicit `allowInsufficientStockProductIds` request field supports the app's "sell anyway" path.
+
+The mobile app is not connected to these endpoints yet. That keeps its current offline behavior unchanged while the backend contract is established.
+
+## Checks
+
+```bash
+make app-typecheck
+make backend-test
+```
