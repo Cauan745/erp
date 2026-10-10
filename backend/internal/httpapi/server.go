@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"stockroom/backend/internal/model"
 	"stockroom/backend/internal/repository"
 )
 
@@ -28,6 +29,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/stock/adjustments/{id}", s.updateStockAdjustmentReason)
 	mux.HandleFunc("GET /api/v1/sales", s.listSales)
 	mux.HandleFunc("POST /api/v1/sales/checkout", s.checkout)
+	mux.HandleFunc("POST /api/v1/sync/push", s.pushSync)
+	mux.HandleFunc("GET /api/v1/sync/pull", s.pullSync)
 
 	return withJSON(withCORS(withRecovery(mux)))
 }
@@ -214,6 +217,54 @@ func (s *Server) checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, sale)
+}
+
+func (s *Server) pushSync(w http.ResponseWriter, r *http.Request) {
+	var request model.SyncPushRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if len(request.Operations) == 0 {
+		writeJSON(w, http.StatusOK, model.SyncPushResponse{Results: []model.SyncOperationResult{}})
+		return
+	}
+	if len(request.Operations) > 100 {
+		writeError(w, http.StatusBadRequest, "sync_batch_too_large", "a sync batch cannot contain more than 100 operations", nil)
+		return
+	}
+	results, err := s.store.PushOperations(r.Context(), request.Operations)
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, model.SyncPushResponse{Results: results})
+}
+
+func (s *Server) pullSync(w http.ResponseWriter, r *http.Request) {
+	after := int64(0)
+	limit := 100
+	if rawAfter := r.URL.Query().Get("after"); rawAfter != "" {
+		parsed, err := strconv.ParseInt(rawAfter, 10, 64)
+		if err != nil || parsed < 0 {
+			writeError(w, http.StatusBadRequest, "sync_cursor_invalid", "after must be a non-negative integer", nil)
+			return
+		}
+		after = parsed
+	}
+	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil || parsed <= 0 || parsed > 500 {
+			writeError(w, http.StatusBadRequest, "sync_limit_invalid", "limit must be between 1 and 500", nil)
+			return
+		}
+		limit = parsed
+	}
+	response, err := s.store.PullChanges(r.Context(), after, limit)
+	if err != nil {
+		writeInternalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func withJSON(next http.Handler) http.Handler {

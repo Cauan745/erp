@@ -27,7 +27,7 @@ export function CheckoutModal({ visible, total, onClose, onConfirm }: CheckoutMo
             <Text style={styles.totalLabel}>{t('common.total')}</Text>
             <Text style={styles.totalValue}>{money(total, locale)}</Text>
           </View>
-          <Pressable style={styles.primaryButton} onPress={onConfirm}>
+          <Pressable style={styles.primaryButton} onPress={() => onConfirm()}>
             <Text style={styles.primaryButtonText}>{t('checkout.confirmCashPayment')}</Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={onClose}>

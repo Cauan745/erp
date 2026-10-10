@@ -49,10 +49,16 @@ The API stores money as integer cents in JSON fields such as `priceCents` and `t
 - `PATCH /api/v1/stock/adjustments/{id}`
 - `GET /api/v1/sales`
 - `POST /api/v1/sales/checkout`
+- `POST /api/v1/sync/push`
+- `GET /api/v1/sync/pull?after=0&limit=100`
 
 Checkout validates stock, locks the product rows, decrements stock, stores the sale, and stores product name and price snapshots in one PostgreSQL transaction. The explicit `allowInsufficientStockProductIds` request field supports the app's "sell anyway" path.
 
-The mobile app is not connected to these endpoints yet. That keeps its current offline behavior unchanged while the backend contract is established.
+The mobile app writes products, stock changes, sales, and synchronization operations to SQLite in one local transaction. A foreground sync worker pushes durable outbox operations and pulls server changes when the app starts, returns to the foreground, and while it remains active. Network failures do not block local work.
+
+Each pushed operation has a client-generated UUID. PostgreSQL records processed operation IDs in the same transaction as the business change, so retrying after a lost response returns the previous result instead of creating a duplicate sale or stock change. Pull uses the server's monotonic change sequence. Product edits use optimistic version checks; stock changes are deltas, not quantity overwrites. If a pulled server change overlaps an unacknowledged local operation, the server snapshot is applied so the cursor can advance, while a durable local conflict record is retained and the local operation remains available for retry or resolution. Normal server-side insufficient-stock conflicts are rejected, while the existing explicit "sell anyway" operation can create negative stock.
+
+The sync worker runs while the app is active and registers an Expo background task with a 15-minute minimum interval. The operating system controls whether and when that task runs; it is best-effort and never replaces foreground synchronization or blocks local selling. A native development build is required for background execution; Expo Go does not provide it.
 
 ## Checks
 

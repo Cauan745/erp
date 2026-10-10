@@ -1,8 +1,10 @@
-import { Platform } from 'react-native';
-
 import { getDatabase } from '../db';
 import { AppError } from '../../errors';
 import { StockHistoryEntry } from './types';
+import { createUuid } from '../ids';
+import { runInTransaction } from '../transactions';
+import { enqueueOperation } from '../sync/repository';
+import { SYNC_OPERATION_TYPES } from '../sync/types';
 
 type StockHistoryRow = {
   id: string;
@@ -16,20 +18,6 @@ type StockHistoryRow = {
 
 export const STOCK_REASON_AUTO_SALE_REPLENISHMENT = 'sale-shortage-replenishment';
 
-const id = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-async function runInTransaction(
-  database: Awaited<ReturnType<typeof getDatabase>>,
-  task: (transaction: typeof database) => Promise<void>
-) {
-  if (Platform.OS === 'web') {
-    await database.withTransactionAsync(() => task(database));
-    return;
-  }
-
-  await database.withExclusiveTransactionAsync((transaction) => task(transaction));
-}
-
 export async function adjustStock(productId: string, quantity: number, reason?: string): Promise<void> {
   if (!Number.isSafeInteger(quantity) || quantity === 0) {
     throw new AppError('stockChangeInteger');
@@ -38,12 +26,13 @@ export async function adjustStock(productId: string, quantity: number, reason?: 
   const database = await getDatabase();
   const createdAt = new Date().toISOString();
   const normalizedReason = reason?.trim() || null;
+  const adjustmentId = createUuid();
 
   await runInTransaction(database, async (transaction) => {
     const result = await transaction.runAsync(
       `UPDATE products
-       SET stock = stock + ?, updated_at = ?
-       WHERE id = ?;`,
+       SET stock = stock + ?, version = version + 1, updated_at = ?
+       WHERE id = ? AND deleted_at IS NULL;`,
       quantity,
       createdAt,
       productId
@@ -56,12 +45,26 @@ export async function adjustStock(productId: string, quantity: number, reason?: 
     await transaction.runAsync(
       `INSERT INTO stock_adjustments (id, product_id, quantity, reason, created_at)
        VALUES (?, ?, ?, ?, ?);`,
-      id('stock-adjustment'),
+      adjustmentId,
       productId,
       quantity,
       normalizedReason,
       createdAt
     );
+    await enqueueOperation(transaction, {
+      operationType: SYNC_OPERATION_TYPES.stockAdjustment,
+      aggregateId: adjustmentId,
+      payload: {
+        adjustment: {
+          id: adjustmentId,
+          productId,
+          quantity,
+          reason: normalizedReason,
+          createdAt
+        }
+      },
+      createdAt
+    });
   });
 }
 
@@ -76,17 +79,32 @@ export async function addProductStock(productId: string, quantity = 1, reason?: 
 export async function updateStockAdjustmentReason(adjustmentId: string, reason: string): Promise<void> {
   const database = await getDatabase();
   const normalizedReason = reason.trim() || null;
-  const result = await database.runAsync(
-    `UPDATE stock_adjustments
-     SET reason = ?
-     WHERE id = ?;`,
-    normalizedReason,
-    adjustmentId
-  );
+  await runInTransaction(database, async (transaction) => {
+    const result = await transaction.runAsync(
+      `UPDATE stock_adjustments
+       SET reason = ?
+       WHERE id = ?;`,
+      normalizedReason,
+      adjustmentId
+    );
 
-  if (result.changes !== 1) {
-    throw new AppError('stockAdjustmentMissing');
-  }
+    if (result.changes !== 1) throw new AppError('stockAdjustmentMissing');
+
+    const dependency = await transaction.getFirstAsync<{ operation_id: string }>(`
+      SELECT operation_id
+      FROM sync_outbox
+      WHERE operation_type = ? AND aggregate_id = ?
+      ORDER BY created_at DESC
+      LIMIT 1;
+    `, SYNC_OPERATION_TYPES.stockAdjustment, adjustmentId);
+
+    await enqueueOperation(transaction, {
+      operationType: SYNC_OPERATION_TYPES.stockReasonUpdate,
+      aggregateId: adjustmentId,
+      dependsOnOperationId: dependency?.operation_id ?? null,
+      payload: { adjustmentId, reason: normalizedReason }
+    });
+  });
 }
 
 export async function listStockHistory(limit = 50): Promise<StockHistoryEntry[]> {

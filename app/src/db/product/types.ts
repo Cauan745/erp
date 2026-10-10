@@ -5,5 +5,7 @@ export type Product = {
   category: string;
   price: number;
   stock: number;
+  version: number;
   createdAt: string;
+  updatedAt: string;
 };

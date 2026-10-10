@@ -6,6 +6,8 @@ export const CREATE_PRODUCTS_TABLE = `
     category TEXT NOT NULL DEFAULT 'General',
     price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
     stock INTEGER NOT NULL DEFAULT 0,
+    version INTEGER NOT NULL DEFAULT 1,
+    deleted_at TEXT,
     updated_at TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
@@ -19,13 +21,15 @@ export const MIGRATE_PRODUCTS_TO_ALLOW_NEGATIVE_STOCK = `
     category TEXT NOT NULL DEFAULT 'General',
     price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
     stock INTEGER NOT NULL DEFAULT 0,
+    version INTEGER NOT NULL DEFAULT 1,
+    deleted_at TEXT,
     updated_at TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
 
   INSERT INTO products_without_stock_check
-    (id, name, barcode, category, price_cents, stock, updated_at, created_at)
-  SELECT id, name, barcode, category, price_cents, stock, updated_at, created_at
+    (id, name, barcode, category, price_cents, stock, version, deleted_at, updated_at, created_at)
+  SELECT id, name, barcode, category, price_cents, stock, 1, NULL, updated_at, created_at
   FROM products;
 
   DROP TABLE products;

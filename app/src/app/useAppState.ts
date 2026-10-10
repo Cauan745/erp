@@ -12,6 +12,7 @@ import {
   listStockHistory,
   adjustStock,
   STOCK_REASON_AUTO_SALE_REPLENISHMENT,
+  updateProduct,
   updateStockAdjustmentReason
 } from '../db';
 import { Product } from '../db/product/types';
@@ -45,6 +46,7 @@ export function useAppState() {
   const [loading, setLoading] = useState(true);
   const [startupError, setStartupError] = useState<string | null>(null);
   const [productForm, setProductForm] = useState<ProductForm>(emptyProductForm);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [stockAdjustmentProductId, setStockAdjustmentProductId] = useState<string | null>(null);
   const [stockReasonEditEntry, setStockReasonEditEntry] = useState<StockHistoryEntry | null>(null);
 
@@ -288,19 +290,42 @@ export function useAppState() {
     }
 
     try {
-      await createProduct({
+      const input = {
         name,
         price,
         stock,
         barcode: productForm.barcode.trim(),
         category: productForm.category.trim() || t('products.categoryPlaceholder')
-      });
+      };
+      if (editingProductId) {
+        await updateProduct(editingProductId, input);
+      } else {
+        await createProduct(input);
+      }
+      setEditingProductId(null);
       setProductForm(emptyProductForm);
       await refresh();
-      showNotice(t('alerts.productSaved'));
+      showNotice(t(editingProductId ? 'alerts.productUpdated' : 'alerts.productSaved'));
     } catch (error) {
       Alert.alert(t('alerts.saveProductFailedTitle'), errorMessage(error, t));
     }
+  };
+
+  const editProduct = (product: Product) => {
+    setEditingProductId(product.id);
+    setProductForm({
+      name: product.name,
+      price: String(product.price),
+      stock: String(product.stock),
+      barcode: product.barcode,
+      category: product.category
+    });
+    setTab('products');
+  };
+
+  const cancelProductEdit = () => {
+    setEditingProductId(null);
+    setProductForm(emptyProductForm);
   };
 
   const saveStockAdjustment = async (quantityInput: string, reason: string) => {
@@ -364,9 +389,14 @@ export function useAppState() {
       setCart({});
       setCheckoutOpen(false);
       setCartOpen(false);
-      await refresh();
+      try {
+        await refresh();
+      } catch (refreshError) {
+        console.error('Local refresh after checkout failed', refreshError);
+      }
       showNotice(t('alerts.saleSaved'));
     } catch (error) {
+      console.error('Checkout failed before local sale confirmation', error);
       if (error instanceof InsufficientStockError) {
         const { shortage } = error;
         Alert.alert(
@@ -403,6 +433,7 @@ export function useAppState() {
     sales,
     stockHistory,
     productForm,
+    editingProductId,
     setProductForm: setProductForm as SetProductForm,
     filteredProducts,
     search,
@@ -433,6 +464,8 @@ export function useAppState() {
     updateQuantity,
     onBarcode,
     saveProduct,
+    editProduct,
+    cancelProductEdit,
     completeCheckout,
     saveStockAdjustment,
     loading,

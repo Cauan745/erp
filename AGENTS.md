@@ -4,7 +4,7 @@
 
 Stockroom is an Expo and React Native ERP MVP for local product sales, with a Go and PostgreSQL backend in the same repository.
 
-The mobile app remains local-first. The backend now provides a server-side API for products, stock, sales, and checkout, but the mobile client is not connected to it yet.
+The mobile app remains local-first. The backend provides a server-side API and synchronization protocol, but SQLite remains the immediate source of truth for UI reads and writes.
 
 The current app scope is:
 
@@ -13,7 +13,7 @@ The current app scope is:
 - Check out cash sales.
 - Store products, stock, and sales on the device.
 
-Object recognition, cross-device sync, accounts, and device identity are planned work. Do not add them unless the user requests them.
+Object recognition, accounts, and device identity are planned work. Cross-device sync is implemented through `app/src/sync/` and the backend sync endpoints.
 
 The repository has two top-level application folders:
 
@@ -48,8 +48,13 @@ Do not reintroduce RxDB or its storage plugin unless the user explicitly asks fo
 - `app/src/db/index.ts` is the database repository export surface used by the app.
 - `app/app.json` configures Expo, VisionCamera permissions, and the SQLite plugin.
 - `backend/internal/database/migrations/001_init.sql` defines the PostgreSQL schema and seed products.
+- `backend/internal/database/migrations/002_sync.sql` adds server operation records, product versions, tombstones, and the ordered change log.
 - `backend/internal/repository/repository.go` contains PostgreSQL product, stock, history, and checkout operations.
-- `backend/internal/httpapi/server.go` defines the JSON API and translates repository errors into stable error codes.
+- `backend/internal/repository/sync.go` processes idempotent operations and records the server change log.
+- `backend/internal/httpapi/server.go` defines the JSON API, sync push/pull endpoints, and stable error codes.
+- `app/src/sync/service.ts` pushes the SQLite outbox and applies paginated server changes.
+- `app/src/sync/api.ts` defines the mobile sync request and response contract.
+- `app/src/db/sync/repository.ts` manages outbox leases, retry state, sync cursors, and conflict records.
 - `Makefile` provides root commands for the app, backend, and local PostgreSQL container.
 
 ## Database rules
@@ -58,7 +63,7 @@ Do not reintroduce RxDB or its storage plugin unless the user explicitly asks fo
 - Store money in integer cents in SQLite columns such as `price_cents` and `total_cents`.
 - Convert cents to decimal numbers only at the repository boundary used by the UI.
 - Use parameterized SQLite queries for user or document values.
-- Increment `DATABASE_VERSION` when changing the schema.
+- The current mobile `DATABASE_VERSION` is `5`. Increment it for every later SQLite schema change.
 - Apply mobile schema changes inside the versioned transaction in `app/src/db/db.ts`. Apply backend schema changes in ordered files under `backend/internal/database/migrations/`.
 - Preserve existing local data during migrations. Do not delete or recreate tables as a shortcut.
 - Keep the partial unique barcode index. Empty barcodes must remain allowed, but non-empty barcodes must be unique.
@@ -71,10 +76,35 @@ Do not reintroduce RxDB or its storage plugin unless the user explicitly asks fo
 - Automatic stock added to complete a sale must store its internal reason code and translate that code only at the UI boundary.
 - Product creation accepts an integer initial stock and defaults the form value to `0`.
 - Do not copy sale stock changes into `stock_adjustments`. Combine sales and manual adjustments when displaying stock history.
+- Every local product, sale, sale item, stock adjustment, and outbox operation created after the sync migration must use a client-generated UUID.
+- Every local mutation must enqueue its sync operation in the same SQLite transaction as its business rows.
+- The outbox is durable. Never delete pending or permanently rejected operations after a request failure.
+- The server must process each operation ID at most once. Persist the processed operation record in the same PostgreSQL transaction as the business change.
+- Inventory synchronization sends sale and signed adjustment operations. It must not overwrite server stock with a cached local quantity.
+- Product changes use expected versions. A version conflict is rejected and remains visible as a failed outbox operation.
+- Pull changes use the server sequence cursor. Apply a page and advance the cursor in one SQLite transaction. Preserve tombstones.
+
+## Synchronization rules
+
+- The mobile UI never waits for the API. It reads and writes through the local repositories, then the sync worker sends durable outbox operations later.
+- Supported operation types are `product.create`, `product.update`, `product.delete`, `stock.adjustment`, `stock.reason.update`, and `sale.checkout`.
+- Outbox rows use `pending`, `in_flight`, `failed`, or `acknowledged` status. A claimed row has a lease so an app crash makes it eligible again. Network failures use exponential retry delays. Permanent rejections stay in the database with their error details.
+- Product create/update/delete operations depend on earlier operations for the same product. Do not remove dependency checks or send dependent operations out of order.
+- Push acknowledgements are recorded only after the server returns `applied` or `already_applied`. The server stores each processed operation ID in `processed_sync_operations` in the same PostgreSQL transaction as its business changes.
+- `sale.checkout` is one server transaction covering the sale, sale items, stock decrements, change-log entries, and processed-operation record. Retrying the same operation must return its stored outcome.
+- Stock synchronization sends signed adjustments and sale quantities. Never send a cached product stock value as an instruction to overwrite server inventory.
+- Pull requests use `server_cursor`, which is a PostgreSQL change-log sequence. The client advances it only after applying the complete page in SQLite. If applying a page fails, the transaction rolls back and the cursor stays unchanged.
+- Pull tombstones prevent deleted products from reappearing. Do not replace tombstones with hard deletes unless the pull protocol changes with them.
+- If a pulled change overlaps an unacknowledged local operation, apply the server snapshot, retain a row in `sync_conflicts`, and keep the local outbox operation. Product version conflicts are rejected by the server. This is the current conflict policy and must remain documented if it changes.
+- The current stock policy rejects a server-side sale when stock is insufficient. The explicit local "Sell anyway" choice sends the affected product IDs and permits negative stock.
+- `EXPO_PUBLIC_API_URL` overrides the API URL. Without it, Android uses `http://10.0.2.2:8080` and other platforms use `http://localhost:8080`.
+- `listOutboxOperations`, `retryFailedOperation`, `listSyncConflicts`, and `resolveSyncConflict` are the repository-level inspection and recovery hooks. Keep permanently rejected operations visible to any future diagnostics UI.
 
 ## Native and platform rules
 
 - The app uses `react-native-vision-camera`, so it needs a native development build. Expo Go cannot load this scanner module.
+- Background synchronization uses `expo-background-task` and `expo-task-manager`; it is best-effort and OS-scheduled, not an always-running worker. Expo Go does not support it.
+- The foreground worker attempts sync at app startup, when the app returns to the foreground, and every 60 seconds while active. The background task uses a 15-minute minimum interval, but the operating system decides whether it runs.
 - `npm --prefix app run android` runs `expo run:android --device`, which targets a connected physical device or lets Expo select a device.
 - `make run` calls the app's Android command through `app/Makefile`.
 - Use USB debugging or an Android device connected through ADB when running on a phone.
@@ -94,6 +124,8 @@ make backend-test
 
 Run `make app-typecheck` after TypeScript changes. Run `make backend-test` after Go changes. The mobile app currently has no automated test script.
 
+The PostgreSQL integration tests run only when `TEST_DATABASE_URL` is set. They cover idempotent checkout processing and require a migrated PostgreSQL database. If Docker or PostgreSQL is unavailable, report that integration coverage was skipped instead of treating unit or HTTP tests as full database validation.
+
 ## Code conventions
 
 - Keep mobile database access in repositories under `app/src/db/`. UI components should call repository functions instead of composing SQL.
@@ -101,4 +133,5 @@ Run `make app-typecheck` after TypeScript changes. Run `make backend-test` after
 - Keep database errors visible to the user through the existing startup error screen or an alert for an action failure.
 - Keep product and sale types separate from raw SQLite row types. Map snake_case database rows to camelCase app objects in repositories.
 - Preserve the existing local-first behavior. A new product or sale should be usable immediately without network access.
-- Avoid adding client network sync, authentication, or object-recognition code as part of unrelated MVP changes.
+- Keep HTTP sync in `app/src/sync/`, never in UI components. Sync may update local SQLite after a successful local operation, but it must not gate UI success on network availability.
+- Avoid adding authentication or object-recognition code as part of unrelated MVP changes.

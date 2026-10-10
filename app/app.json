@@ -29,7 +29,8 @@
           "cameraPermissionText": "Permita que o Stockroom escaneie códigos de barras de produtos."
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-background-task"
     ]
   }
 }

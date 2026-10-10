@@ -1,5 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { Text, View } from 'react-native';
+import { useEffect } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppHeader } from '../components/AppHeader';
@@ -15,10 +16,13 @@ import { SalesTab } from '../components/tabs/SalesTab';
 import { SellTab } from '../components/tabs/SellTab';
 import { styles } from '../styles';
 import { useAppState } from './useAppState';
+import { startSyncWorker } from '../sync/service';
 
 export function AppContent() {
   const insets = useSafeAreaInsets();
   const app = useAppState();
+
+  useEffect(() => startSyncWorker(), []);
 
   if (app.loading) {
     return <StartupScreen topInset={insets.top} bottomInset={insets.bottom} />;
@@ -59,6 +63,9 @@ export function AppContent() {
             form={app.productForm}
             setForm={app.setProductForm}
             onSave={app.saveProduct}
+            editingProductId={app.editingProductId}
+            onEditProduct={app.editProduct}
+            onCancelEdit={app.cancelProductEdit}
             onScan={() => app.openScanner('product')}
             onOpenStockAdjustment={app.openStockAdjustment}
             onEditStockReason={app.openStockReasonEdit}

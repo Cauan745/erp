@@ -9,10 +9,11 @@ type ProductRowProps = {
   product: Product;
   onPress?: () => void;
   onStockUpdate?: () => void;
+  onEdit?: () => void;
   compact?: boolean;
 };
 
-export function ProductRow({ product, onPress, onStockUpdate, compact = false }: ProductRowProps) {
+export function ProductRow({ product, onPress, onStockUpdate, onEdit, compact = false }: ProductRowProps) {
   const { locale, t } = useI18n();
 
   const body = (
@@ -29,6 +30,11 @@ export function ProductRow({ product, onPress, onStockUpdate, compact = false }:
         {onPress ? <Text style={styles.addHint}>{t('common.add')}</Text> : (
           <>
             <Text style={styles.muted}>{t('common.inStock', { count: product.stock })}</Text>
+            {onEdit ? (
+              <Pressable onPress={onEdit} hitSlop={8}>
+                <Text style={styles.addHint}>{t('products.editProduct')}</Text>
+              </Pressable>
+            ) : null}
             {onStockUpdate ? (
               <Pressable onPress={onStockUpdate} hitSlop={8}>
                 <Text style={styles.addHint}>{t('common.adjustStock')}</Text>

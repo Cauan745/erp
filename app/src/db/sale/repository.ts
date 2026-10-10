@@ -1,8 +1,10 @@
-import { Platform } from 'react-native';
-
 import { getDatabase } from '../db';
 import { AppError } from '../../errors';
 import { Sale, SaleLine } from './types';
+import { createUuid } from '../ids';
+import { runInTransaction } from '../transactions';
+import { enqueueOperation } from '../sync/repository';
+import { SYNC_OPERATION_TYPES } from '../sync/types';
 
 type SaleRow = {
   id: string;
@@ -56,8 +58,6 @@ export class InsufficientStockError extends AppError {
   }
 }
 
-const id = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
 const lineFromRow = (row: SaleItemRow): SaleLine => ({
   productId: row.product_id,
   name: row.product_name,
@@ -65,18 +65,6 @@ const lineFromRow = (row: SaleItemRow): SaleLine => ({
   unitPrice: row.unit_price_cents / 100,
   lineTotal: row.line_total_cents / 100
 });
-
-async function runInTransaction(
-  database: Awaited<ReturnType<typeof getDatabase>>,
-  task: (transaction: typeof database) => Promise<void>
-) {
-  if (Platform.OS === 'web') {
-    await database.withTransactionAsync(() => task(database));
-    return;
-  }
-
-  await database.withExclusiveTransactionAsync((transaction) => task(transaction));
-}
 
 export async function listSales(): Promise<Sale[]> {
   const database = await getDatabase();
@@ -130,6 +118,8 @@ export async function checkout(
   }
 
   const database = await getDatabase();
+  const createdAt = new Date().toISOString();
+  const saleId = createUuid();
   let completedSale: Sale | undefined;
 
   await runInTransaction(database, async (transaction) => {
@@ -139,7 +129,7 @@ export async function checkout(
       const product = await transaction.getFirstAsync<ProductForCheckout>(`
         SELECT id, name, price_cents, stock
         FROM products
-        WHERE id = ?;
+        WHERE id = ? AND deleted_at IS NULL;
       `, productId);
 
       if (!product) {
@@ -168,8 +158,6 @@ export async function checkout(
       });
     }
 
-    const createdAt = new Date().toISOString();
-    const saleId = id('sale');
     const totalCents = saleLineRecords.reduce((sum, line) => sum + line.lineTotalCents, 0);
 
     for (const line of saleLineRecords) {
@@ -178,7 +166,7 @@ export async function checkout(
       const result = allowInsufficientStock
         ? await transaction.runAsync(
           `UPDATE products
-           SET stock = stock - ?, updated_at = ?
+           SET stock = stock - ?, version = version + 1, updated_at = ?
            WHERE id = ?;`,
           line.quantity,
           createdAt,
@@ -186,7 +174,7 @@ export async function checkout(
         )
         : await transaction.runAsync(
           `UPDATE products
-           SET stock = stock - ?, updated_at = ?
+           SET stock = stock - ?, version = version + 1, updated_at = ?
            WHERE id = ? AND stock >= ?;`,
           line.quantity,
           createdAt,
@@ -208,21 +196,57 @@ export async function checkout(
       createdAt
     );
 
-    for (const [lineNumber, line] of saleLineRecords.entries()) {
+    const saleItemRecords = saleLineRecords.map((line, lineNumber) => ({
+      id: createUuid(),
+      saleId,
+      lineNumber,
+      productId: line.productId,
+      productName: line.name,
+      quantity: line.quantity,
+      unitPriceCents: line.unitPriceCents,
+      lineTotalCents: line.lineTotalCents
+    }));
+
+    for (const item of saleItemRecords) {
       await transaction.runAsync(
         `INSERT INTO sale_items
           (id, sale_id, line_number, product_id, product_name, quantity, unit_price_cents, line_total_cents)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
-        id('sale-item'),
-        saleId,
-        lineNumber,
-        line.productId,
-        line.name,
-        line.quantity,
-        line.unitPriceCents,
-        line.lineTotalCents
+        item.id,
+        item.saleId,
+        item.lineNumber,
+        item.productId,
+        item.productName,
+        item.quantity,
+        item.unitPriceCents,
+        item.lineTotalCents
       );
     }
+
+    const syncLines = saleItemRecords.map((item) => ({
+      id: item.id,
+      saleId: item.saleId,
+      lineNumber: item.lineNumber,
+      productId: item.productId,
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPriceCents: item.unitPriceCents,
+      lineTotalCents: item.lineTotalCents
+    }));
+    const allowedProductIds = options.allowInsufficientStock
+      ? saleLineRecords.map((line) => line.productId)
+      : Array.from(options.allowInsufficientStockProductIds ?? []);
+
+    await enqueueOperation(transaction, {
+      operationType: SYNC_OPERATION_TYPES.saleCheckout,
+      aggregateId: saleId,
+      payload: {
+        sale: { id: saleId, totalCents, paymentMethod: 'cash', createdAt },
+        lines: syncLines,
+        allowInsufficientStockProductIds: allowedProductIds
+      },
+      createdAt
+    });
 
     completedSale = {
       id: saleId,

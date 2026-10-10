@@ -48,8 +48,9 @@ type CheckoutInput struct {
 
 func (s *Store) ListProducts(ctx context.Context) ([]model.Product, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, COALESCE(barcode, ''), category, price_cents, stock, created_at, updated_at
+		SELECT id, name, COALESCE(barcode, ''), category, price_cents, stock, version, deleted_at, created_at, updated_at
 		FROM products
+		WHERE deleted_at IS NULL
 		ORDER BY created_at DESC, lower(name) ASC;`)
 	if err != nil {
 		return nil, fmt.Errorf("list products: %w", err)
@@ -59,7 +60,7 @@ func (s *Store) ListProducts(ctx context.Context) ([]model.Product, error) {
 	products := make([]model.Product, 0)
 	for rows.Next() {
 		var product model.Product
-		if err := rows.Scan(&product.ID, &product.Name, &product.Barcode, &product.Category, &product.PriceCents, &product.Stock, &product.CreatedAt, &product.UpdatedAt); err != nil {
+		if err := rows.Scan(&product.ID, &product.Name, &product.Barcode, &product.Category, &product.PriceCents, &product.Stock, &product.Version, &product.DeletedAt, &product.CreatedAt, &product.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan product: %w", err)
 		}
 		products = append(products, product)
@@ -82,9 +83,9 @@ func (s *Store) CreateProduct(ctx context.Context, input CreateProductInput) (mo
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO products (id, name, barcode, category, price_cents, stock, updated_at, created_at)
 		VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $7)
-		RETURNING id, name, COALESCE(barcode, ''), category, price_cents, stock, created_at, updated_at;`,
+		RETURNING id, name, COALESCE(barcode, ''), category, price_cents, stock, version, deleted_at, created_at, updated_at;`,
 		newID("product"), strings.TrimSpace(input.Name), barcode, category, input.PriceCents, input.Stock, createdAt,
-	).Scan(&product.ID, &product.Name, &product.Barcode, &product.Category, &product.PriceCents, &product.Stock, &product.CreatedAt, &product.UpdatedAt)
+	).Scan(&product.ID, &product.Name, &product.Barcode, &product.Category, &product.PriceCents, &product.Stock, &product.Version, &product.DeletedAt, &product.CreatedAt, &product.UpdatedAt)
 	if err != nil {
 		return model.Product{}, mapDatabaseError("create product", err)
 	}
@@ -94,9 +95,9 @@ func (s *Store) CreateProduct(ctx context.Context, input CreateProductInput) (mo
 func (s *Store) FindProductByBarcode(ctx context.Context, barcode string) (*model.Product, error) {
 	var product model.Product
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, name, COALESCE(barcode, ''), category, price_cents, stock, created_at, updated_at
-		FROM products WHERE barcode = $1 LIMIT 1;`, strings.TrimSpace(barcode)).Scan(
-		&product.ID, &product.Name, &product.Barcode, &product.Category, &product.PriceCents, &product.Stock, &product.CreatedAt, &product.UpdatedAt,
+		SELECT id, name, COALESCE(barcode, ''), category, price_cents, stock, version, deleted_at, created_at, updated_at
+		FROM products WHERE barcode = $1 AND deleted_at IS NULL LIMIT 1;`, strings.TrimSpace(barcode)).Scan(
+		&product.ID, &product.Name, &product.Barcode, &product.Category, &product.PriceCents, &product.Stock, &product.Version, &product.DeletedAt, &product.CreatedAt, &product.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -120,7 +121,7 @@ func (s *Store) AdjustStock(ctx context.Context, input StockAdjustmentInput) err
 	}
 	defer tx.Rollback(ctx)
 
-	result, err := tx.Exec(ctx, `UPDATE products SET stock = stock + $1, updated_at = $2 WHERE id = $3`, input.Quantity, createdAt, input.ProductID)
+	result, err := tx.Exec(ctx, `UPDATE products SET stock = stock + $1, version = version + 1, updated_at = $2 WHERE id = $3 AND deleted_at IS NULL`, input.Quantity, createdAt, input.ProductID)
 	if err != nil {
 		return fmt.Errorf("update stock: %w", err)
 	}
@@ -255,7 +256,7 @@ func (s *Store) Checkout(ctx context.Context, input CheckoutInput) (model.Sale, 
 		var product model.Product
 		err := tx.QueryRow(ctx, `
 			SELECT id, name, price_cents, stock
-			FROM products WHERE id = $1 FOR UPDATE;`, productID).Scan(&product.ID, &product.Name, &product.PriceCents, &product.Stock)
+			FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;`, productID).Scan(&product.ID, &product.Name, &product.PriceCents, &product.Stock)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return model.Sale{}, ErrProductMissing
 		}
@@ -275,7 +276,7 @@ func (s *Store) Checkout(ctx context.Context, input CheckoutInput) (model.Sale, 
 	var totalCents int64
 	for _, productID := range order {
 		line := products[productID]
-		if _, err := tx.Exec(ctx, `UPDATE products SET stock = stock - $1, updated_at = $2 WHERE id = $3`, line.Quantity, createdAt, line.ProductID); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE products SET stock = stock - $1, version = version + 1, updated_at = $2 WHERE id = $3 AND deleted_at IS NULL`, line.Quantity, createdAt, line.ProductID); err != nil {
 			return model.Sale{}, fmt.Errorf("decrement stock: %w", err)
 		}
 		lines = append(lines, line)

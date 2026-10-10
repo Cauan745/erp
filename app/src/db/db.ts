@@ -8,9 +8,17 @@ import {
 } from './product/schema';
 import { CREATE_SALES_TABLE, CREATE_SALE_INDEXES } from './sale/schema';
 import { CREATE_STOCK_ADJUSTMENTS_TABLE, CREATE_STOCK_ADJUSTMENT_INDEXES } from './stock/schema';
+import {
+  CREATE_SYNC_CONFLICTS_TABLE,
+  CREATE_SYNC_INDEXES,
+  CREATE_SYNC_OUTBOX_INDEXES,
+  CREATE_SYNC_OUTBOX_TABLE,
+  CREATE_SYNC_STATE_TABLE,
+  CREATE_SYNC_TOMBSTONES_TABLE
+} from './sync/schema';
 
 const DATABASE_NAME = 'stockroom';
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 5;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | undefined;
 
@@ -24,6 +32,7 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     const currentVersion = versionRow?.user_version ?? 0;
 
     const needsStockConstraintMigration = currentVersion >= 1 && currentVersion < 2;
+    const needsSyncMigration = currentVersion >= 2 && currentVersion < 4;
 
     if (currentVersion < DATABASE_VERSION) {
       if (needsStockConstraintMigration) {
@@ -36,10 +45,17 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
             CREATE_PRODUCTS_TABLE,
             CREATE_SALES_TABLE,
             needsStockConstraintMigration ? MIGRATE_PRODUCTS_TO_ALLOW_NEGATIVE_STOCK : '',
+            needsSyncMigration ? MIGRATE_PRODUCTS_TO_ADD_SYNC_COLUMNS : '',
             CREATE_STOCK_ADJUSTMENTS_TABLE,
             CREATE_PRODUCT_INDEXES,
             CREATE_SALE_INDEXES,
-            CREATE_STOCK_ADJUSTMENT_INDEXES
+            CREATE_STOCK_ADJUSTMENT_INDEXES,
+            CREATE_SYNC_OUTBOX_TABLE,
+            CREATE_SYNC_OUTBOX_INDEXES,
+            CREATE_SYNC_STATE_TABLE,
+            CREATE_SYNC_CONFLICTS_TABLE,
+            CREATE_SYNC_TOMBSTONES_TABLE,
+            CREATE_SYNC_INDEXES
           ].join('\n'));
 
           for (const product of SEED_PRODUCTS) {
@@ -73,6 +89,11 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     throw error;
   }
 }
+
+const MIGRATE_PRODUCTS_TO_ADD_SYNC_COLUMNS = `
+  ALTER TABLE products ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE products ADD COLUMN deleted_at TEXT;
+`;
 
 export function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!databasePromise) {
