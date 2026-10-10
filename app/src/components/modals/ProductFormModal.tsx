@@ -1,4 +1,5 @@
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '../../constants';
@@ -10,6 +11,7 @@ import { Field } from '../common/Field';
 type ProductFormModalProps = {
   visible: boolean;
   form: ProductForm;
+  categories: string[];
   setForm: SetProductForm;
   editing: boolean;
   onClose: () => void;
@@ -20,6 +22,7 @@ type ProductFormModalProps = {
 export function ProductFormModal({
   visible,
   form,
+  categories,
   setForm,
   editing,
   onClose,
@@ -28,6 +31,17 @@ export function ProductFormModal({
 }: ProductFormModalProps) {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const categoryQuery = form.category.trim().toLocaleLowerCase();
+  const categorySuggestions = useMemo(
+    () => categories.filter((category) => category.toLocaleLowerCase().includes(categoryQuery)).slice(0, 8),
+    [categories, categoryQuery]
+  );
+  const hasExactCategory = categories.some((category) => category.toLocaleLowerCase() === categoryQuery);
+
+  useEffect(() => {
+    if (!visible) setCategoryMenuOpen(false);
+  }, [visible]);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -94,12 +108,47 @@ export function ProductFormModal({
                 keyboardType="number-pad"
               />
 
-              <Field
-                label={t('products.category')}
-                value={form.category}
-                placeholder={t('products.categoryPlaceholder')}
-                onChangeText={(category) => setForm((current) => ({ ...current, category }))}
-              />
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>{t('products.category')}</Text>
+                <TextInput
+                  value={form.category}
+                  placeholder={t('products.categoryPlaceholder')}
+                  placeholderTextColor={colors.muted}
+                  style={styles.input}
+                  onFocus={() => setCategoryMenuOpen(true)}
+                  onBlur={() => setTimeout(() => setCategoryMenuOpen(false), 100)}
+                  onChangeText={(category) => {
+                    setForm((current) => ({ ...current, category }));
+                    setCategoryMenuOpen(true);
+                  }}
+                />
+                {categoryMenuOpen && (categorySuggestions.length > 0 || (categoryQuery.length > 0 && !hasExactCategory)) ? (
+                  <View style={styles.categorySuggestions}>
+                    {categorySuggestions.map((category) => (
+                      <Pressable
+                        key={category}
+                        style={styles.categorySuggestion}
+                        onPress={() => {
+                          setForm((current) => ({ ...current, category }));
+                          setCategoryMenuOpen(false);
+                        }}
+                      >
+                        <Text style={styles.categorySuggestionText}>{category}</Text>
+                      </Pressable>
+                    ))}
+                    {categoryQuery.length > 0 && !hasExactCategory ? (
+                      <Pressable
+                        style={styles.categoryCreateSuggestion}
+                        onPress={() => setCategoryMenuOpen(false)}
+                      >
+                        <Text style={styles.categoryCreateText}>
+                          {t('products.createCategory', { category: form.category.trim() })}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
               <Pressable style={styles.primaryButton} onPress={onSave}>
                 <Text style={styles.primaryButtonText}>{editing ? t('products.saveChanges') : t('products.saveLocally')}</Text>
               </Pressable>

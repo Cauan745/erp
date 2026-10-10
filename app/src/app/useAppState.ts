@@ -94,6 +94,11 @@ export function useAppState() {
       `${product.name} ${product.barcode} ${product.category}`.toLowerCase().includes(term)
     );
   }, [products, productSearch]);
+  const categories = useMemo(
+    () => Array.from(new Set(products.map((product) => product.category.trim()).filter(Boolean)))
+      .sort((left, right) => left.localeCompare(right, 'pt-BR')),
+    [products]
+  );
   const stockAdjustmentProduct = useMemo(
     () => products.find((product) => product.id === stockAdjustmentProductId) ?? null,
     [products, stockAdjustmentProductId]
@@ -466,6 +471,7 @@ export function useAppState() {
     tab,
     setTab,
     products,
+    categories,
     sales,
     stockHistory,
     productForm,

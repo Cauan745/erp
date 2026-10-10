@@ -115,6 +115,7 @@ export function AppContent() {
       <ProductFormModal
         visible={app.productFormOpen}
         form={app.productForm}
+        categories={app.categories}
         setForm={app.setProductForm}
         editing={Boolean(app.editingProductId)}
         onClose={app.closeProductForm}
