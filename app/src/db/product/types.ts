@@ -3,7 +3,9 @@ export type Product = {
   name: string;
   barcode: string;
   category: string;
-  price: number;
+  cost: number | null;
+  sellingPrice: number;
+  profit: number | null;
   stock: number;
   version: number;
   createdAt: string;

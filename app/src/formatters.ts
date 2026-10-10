@@ -32,6 +32,7 @@ export const shortDate = (value: string, locale: Locale = 'pt-BR') =>
 const errorKeys: Record<AppErrorCode, TranslationKey> = {
   databaseUnavailable: 'errors.databaseUnavailable',
   productPrice: 'errors.productPrice',
+  productCost: 'errors.productCost',
   productNameRequired: 'errors.productNameRequired',
   productNameDuplicate: 'errors.productNameDuplicate',
   productBarcodeDuplicate: 'errors.productBarcodeDuplicate',

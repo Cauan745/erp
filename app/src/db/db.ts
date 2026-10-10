@@ -4,6 +4,7 @@ import {
   CREATE_PRODUCTS_TABLE,
   CREATE_PRODUCT_INDEXES,
   MIGRATE_PRODUCTS_TO_ALLOW_NEGATIVE_STOCK,
+  MIGRATE_PRODUCTS_TO_SELLING_PRICE,
   SEED_PRODUCTS
 } from './product/schema';
 import {
@@ -23,7 +24,7 @@ import {
 } from './sync/schema';
 
 const DATABASE_NAME = 'stockroom';
-const DATABASE_VERSION = 8;
+const DATABASE_VERSION = 9;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | undefined;
 
@@ -40,6 +41,7 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     const needsSyncMigration = currentVersion >= 2 && currentVersion < 4;
     const needsPaymentMigration = currentVersion >= 1 && currentVersion < 6;
     const needsChangeMigration = currentVersion >= 6 && currentVersion < 7;
+    const needsProductPricingMigration = currentVersion >= 1 && currentVersion < 9;
 
     if (currentVersion < DATABASE_VERSION) {
       if (needsStockConstraintMigration || needsPaymentMigration || needsChangeMigration) {
@@ -55,6 +57,7 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
             needsSyncMigration ? MIGRATE_PRODUCTS_TO_ADD_SYNC_COLUMNS : '',
             needsPaymentMigration ? MIGRATE_SALES_TO_PAYMENT_METHODS : '',
             needsChangeMigration ? MIGRATE_SALES_TO_REMOVE_CHANGE : '',
+            needsProductPricingMigration ? MIGRATE_PRODUCTS_TO_SELLING_PRICE : '',
             CREATE_STOCK_ADJUSTMENTS_TABLE,
             CREATE_PRODUCT_INDEXES,
             CREATE_SALE_INDEXES,
@@ -64,19 +67,20 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
             CREATE_SYNC_STATE_TABLE,
             CREATE_SYNC_CONFLICTS_TABLE,
             CREATE_SYNC_TOMBSTONES_TABLE,
-            CREATE_SYNC_INDEXES
+            CREATE_SYNC_INDEXES,
+            needsProductPricingMigration ? MIGRATE_PRODUCT_PRICING_OUTBOX_PAYLOADS : ''
           ].join('\n'));
 
           for (const product of SEED_PRODUCTS) {
             await database.runAsync(
               `INSERT OR IGNORE INTO products
-                (id, name, barcode, category, price_cents, stock, updated_at, created_at)
+                (id, name, barcode, category, selling_price_cents, stock, updated_at, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
               product.id,
               product.name,
               product.barcode,
               product.category,
-              product.priceCents,
+              product.sellingPriceCents,
               product.stock,
               product.createdAt,
               product.createdAt
@@ -102,6 +106,16 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
 const MIGRATE_PRODUCTS_TO_ADD_SYNC_COLUMNS = `
   ALTER TABLE products ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
   ALTER TABLE products ADD COLUMN deleted_at TEXT;
+`;
+
+const MIGRATE_PRODUCT_PRICING_OUTBOX_PAYLOADS = `
+  UPDATE sync_outbox
+  SET payload_json = json_set(
+    payload_json,
+    '$.product.sellingPriceCents',
+    json_extract(payload_json, '$.product.priceCents')
+  )
+  WHERE json_type(payload_json, '$.product.priceCents') IS NOT NULL;
 `;
 
 export function getDatabase(): Promise<SQLite.SQLiteDatabase> {

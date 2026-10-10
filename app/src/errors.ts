@@ -1,6 +1,7 @@
 export type AppErrorCode =
   | 'databaseUnavailable'
   | 'productPrice'
+  | 'productCost'
   | 'productNameRequired'
   | 'productNameDuplicate'
   | 'productBarcodeDuplicate'

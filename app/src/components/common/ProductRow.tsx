@@ -26,7 +26,11 @@ export function ProductRow({ product, onPress, onStockUpdate, onEdit, compact = 
         <Text style={styles.muted}>{product.category} · {product.barcode || t('common.noBarcode')}</Text>
       </View>
       <View style={styles.productRight}>
-        <Text style={styles.productPrice}>{money(product.price, locale)}</Text>
+        <Text style={styles.productPrice}>{t('products.sellingPrice')}: {money(product.sellingPrice, locale)}</Text>
+        <Text style={styles.muted}>{t('products.cost')}: {product.cost === null ? t('products.costNotSet') : money(product.cost, locale)}</Text>
+        <Text style={[styles.muted, product.profit !== null && product.profit < 0 && styles.stockHistoryDecrease]}>
+          {t('products.profit')}: {product.profit === null ? t('products.costNotSet') : money(product.profit, locale)}
+        </Text>
         <Text style={styles.muted}>{t('common.inStock', { count: product.stock })}</Text>
         {onPress ? <Text style={styles.addHint}>{t('common.add')}</Text> : (
           <>

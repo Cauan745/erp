@@ -27,7 +27,7 @@ func TestCheckoutOperationIsIdempotent(t *testing.T) {
 
 	store := NewStore(pool)
 	productID := "integration-product-" + time.Now().UTC().Format("20060102150405.000000000")
-	product, err := store.CreateProduct(ctx, CreateProductInput{Name: "Integration Product", Category: "Test", PriceCents: 100, Stock: 2})
+	product, err := store.CreateProduct(ctx, CreateProductInput{Name: "Integration Product", Category: "Test", SellingPriceCents: 100, Stock: 2})
 	if err != nil {
 		t.Fatal(err)
 	}

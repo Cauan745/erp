@@ -24,7 +24,8 @@ import { Cart, CartLine, ProductForm, SetProductForm, Tab } from '../types';
 
 const emptyProductForm: ProductForm = {
   name: '',
-  price: '',
+  cost: '',
+  sellingPrice: '',
   stock: '0',
   barcode: '',
   category: ''
@@ -113,8 +114,8 @@ export function useAppState() {
           productId: product.id,
           name: product.name,
           quantity,
-          unitPrice: product.price,
-          lineTotal: quantity * product.price,
+          unitPrice: product.sellingPrice,
+          lineTotal: quantity * product.sellingPrice,
           allowInsufficientStock: existing?.allowInsufficientStock || allowInsufficientStock
         }
       };
@@ -304,9 +305,12 @@ export function useAppState() {
 
   const saveProduct = async () => {
     const name = productForm.name.trim();
-    const price = Number(productForm.price.replace(',', '.'));
+    const sellingPriceInput = productForm.sellingPrice.trim();
+    const sellingPrice = Number(sellingPriceInput.replace(',', '.'));
+    const costInput = productForm.cost.trim();
+    const cost = costInput ? Number(costInput.replace(',', '.')) : null;
     const stock = Number(productForm.stock.trim());
-    if (!name || !Number.isFinite(price) || price < 0 || !Number.isSafeInteger(stock)) {
+    if (!name || !sellingPriceInput || !Number.isFinite(sellingPrice) || sellingPrice < 0 || (cost !== null && (!Number.isFinite(cost) || cost < 0)) || !Number.isSafeInteger(stock)) {
       Alert.alert(t('alerts.checkProductDetailsTitle'), t('alerts.checkProductDetailsMessage'));
       return;
     }
@@ -315,7 +319,8 @@ export function useAppState() {
       const wasEditing = Boolean(editingProductId);
       const input = {
         name,
-        price,
+        cost,
+        sellingPrice,
         stock,
         barcode: productForm.barcode.trim(),
         category: productForm.category.trim() || 'General'
@@ -337,7 +342,8 @@ export function useAppState() {
     setEditingProductId(product.id);
     setProductForm({
       name: product.name,
-      price: String(product.price),
+      cost: product.cost === null ? '' : String(product.cost),
+      sellingPrice: String(product.sellingPrice),
       stock: String(product.stock),
       barcode: product.barcode,
       category: product.category

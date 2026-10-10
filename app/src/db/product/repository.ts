@@ -11,7 +11,8 @@ type ProductRow = {
   name: string;
   barcode: string | null;
   category: string;
-  price_cents: number;
+  cost_cents: number | null;
+  selling_price_cents: number;
   stock: number;
   version: number;
   deleted_at: string | null;
@@ -19,20 +20,27 @@ type ProductRow = {
   created_at: string;
 };
 
-const centsFromPrice = (price: number) => {
-  if (!Number.isFinite(price) || price < 0) {
-    throw new AppError('productPrice');
+const centsFromMoney = (value: number, errorCode: 'productPrice' | 'productCost') => {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new AppError(errorCode);
   }
 
-  return Math.round(price * 100);
+  const cents = Math.round(value * 100);
+  if (!Number.isSafeInteger(cents)) throw new AppError(errorCode);
+  return cents;
 };
+
+const centsFromOptionalCost = (cost: number | null) =>
+  cost === null ? null : centsFromMoney(cost, 'productCost');
 
 const productFromRow = (row: ProductRow): Product => ({
   id: row.id,
   name: row.name,
   barcode: row.barcode ?? '',
   category: row.category,
-  price: row.price_cents / 100,
+  cost: row.cost_cents === null ? null : row.cost_cents / 100,
+  sellingPrice: row.selling_price_cents / 100,
+  profit: row.cost_cents === null ? null : (row.selling_price_cents - row.cost_cents) / 100,
   stock: row.stock,
   version: row.version,
   createdAt: row.created_at,
@@ -70,7 +78,7 @@ async function assertProductUnique(
 export async function listProducts(): Promise<Product[]> {
   const database = await getDatabase();
   const rows = await database.getAllAsync<ProductRow>(`
-    SELECT id, name, barcode, category, price_cents, stock, version, deleted_at, updated_at, created_at
+    SELECT id, name, barcode, category, cost_cents, selling_price_cents, stock, version, deleted_at, updated_at, created_at
     FROM products
     WHERE deleted_at IS NULL
     ORDER BY created_at DESC, name COLLATE NOCASE ASC;
@@ -79,15 +87,24 @@ export async function listProducts(): Promise<Product[]> {
   return rows.map(productFromRow);
 }
 
-export type CreateProductInput = Omit<Product, 'id' | 'createdAt' | 'version' | 'updatedAt'>;
+export type ProductInput = {
+  name: string;
+  barcode: string;
+  category: string;
+  cost: number | null;
+  sellingPrice: number;
+};
 
-export type UpdateProductInput = Omit<Product, 'id' | 'createdAt' | 'version' | 'updatedAt' | 'stock'>;
+export type CreateProductInput = ProductInput & { stock: number };
+
+export type UpdateProductInput = ProductInput;
 
 export async function createProduct(input: CreateProductInput): Promise<Product> {
   const name = input.name.trim();
   const category = input.category.trim() || 'General';
   const barcode = input.barcode.trim() || null;
-  const priceCents = centsFromPrice(input.price);
+  const costCents = centsFromOptionalCost(input.cost);
+  const sellingPriceCents = centsFromMoney(input.sellingPrice, 'productPrice');
   const stock = Math.trunc(input.stock);
 
   if (!name) {
@@ -103,7 +120,9 @@ export async function createProduct(input: CreateProductInput): Promise<Product>
     name,
     barcode: barcode ?? '',
     category,
-    price: priceCents / 100,
+    cost: costCents === null ? null : costCents / 100,
+    sellingPrice: sellingPriceCents / 100,
+    profit: costCents === null ? null : (sellingPriceCents - costCents) / 100,
     stock,
     version: 1,
     createdAt,
@@ -116,13 +135,14 @@ export async function createProduct(input: CreateProductInput): Promise<Product>
       await assertProductUnique(transaction, name, barcode);
       await transaction.runAsync(
         `INSERT INTO products
-          (id, name, barcode, category, price_cents, stock, version, updated_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          (id, name, barcode, category, cost_cents, selling_price_cents, stock, version, updated_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         product.id,
         product.name,
         barcode,
         product.category,
-        priceCents,
+        costCents,
+        sellingPriceCents,
         product.stock,
         product.version,
         product.updatedAt,
@@ -137,7 +157,8 @@ export async function createProduct(input: CreateProductInput): Promise<Product>
             name: product.name,
             barcode,
             category: product.category,
-            priceCents,
+            costCents,
+            sellingPriceCents,
             stock: product.stock,
             version: product.version,
             createdAt: product.createdAt,
@@ -166,7 +187,7 @@ export async function findProductByBarcode(barcode: string): Promise<Product | n
 
   const database = await getDatabase();
   const row = await database.getFirstAsync<ProductRow>(`
-    SELECT id, name, barcode, category, price_cents, stock, version, deleted_at, updated_at, created_at
+    SELECT id, name, barcode, category, cost_cents, selling_price_cents, stock, version, deleted_at, updated_at, created_at
     FROM products
     WHERE barcode = ? AND deleted_at IS NULL
     LIMIT 1;
@@ -179,14 +200,15 @@ export async function updateProduct(productId: string, input: UpdateProductInput
   const name = input.name.trim();
   const category = input.category.trim() || 'General';
   const barcode = input.barcode.trim() || null;
-  const priceCents = centsFromPrice(input.price);
+  const costCents = centsFromOptionalCost(input.cost);
+  const sellingPriceCents = centsFromMoney(input.sellingPrice, 'productPrice');
   if (!name) throw new AppError('productNameRequired');
 
   const database = await getDatabase();
   try {
     return await runInTransaction(database, async (transaction) => {
       const current = await transaction.getFirstAsync<ProductRow>(`
-        SELECT id, name, barcode, category, price_cents, stock, version, deleted_at, updated_at, created_at
+        SELECT id, name, barcode, category, cost_cents, selling_price_cents, stock, version, deleted_at, updated_at, created_at
         FROM products WHERE id = ? AND deleted_at IS NULL LIMIT 1;
       `, productId);
       if (!current) throw new AppError('productMissing');
@@ -196,12 +218,13 @@ export async function updateProduct(productId: string, input: UpdateProductInput
       const nextVersion = current.version + 1;
       await transaction.runAsync(
         `UPDATE products
-         SET name = ?, barcode = ?, category = ?, price_cents = ?, version = ?, updated_at = ?
+         SET name = ?, barcode = ?, category = ?, cost_cents = ?, selling_price_cents = ?, version = ?, updated_at = ?
          WHERE id = ? AND version = ?;`,
         name,
         barcode,
         category,
-        priceCents,
+        costCents,
+        sellingPriceCents,
         nextVersion,
         updatedAt,
         productId,
@@ -213,7 +236,9 @@ export async function updateProduct(productId: string, input: UpdateProductInput
         name,
         barcode: barcode ?? '',
         category,
-        price: priceCents / 100,
+        cost: costCents === null ? null : costCents / 100,
+        sellingPrice: sellingPriceCents / 100,
+        profit: costCents === null ? null : (sellingPriceCents - costCents) / 100,
         stock: current.stock,
         version: nextVersion,
         createdAt: current.created_at,
@@ -236,7 +261,8 @@ export async function updateProduct(productId: string, input: UpdateProductInput
             name: product.name,
             barcode,
             category: product.category,
-            priceCents,
+            costCents,
+            sellingPriceCents,
             stock: product.stock,
             version: product.version,
             createdAt: product.createdAt,

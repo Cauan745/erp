@@ -23,11 +23,12 @@ type Store struct{ pool *pgxpool.Pool }
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
 type CreateProductInput struct {
-	Name       string
-	Barcode    string
-	Category   string
-	PriceCents int64
-	Stock      int64
+	Name              string
+	Barcode           string
+	Category          string
+	CostCents         *int64
+	SellingPriceCents int64
+	Stock             int64
 }
 
 type StockAdjustmentInput struct {
@@ -50,7 +51,7 @@ type CheckoutInput struct {
 
 func (s *Store) ListProducts(ctx context.Context) ([]model.Product, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, COALESCE(barcode, ''), category, price_cents, stock, version, deleted_at, created_at, updated_at
+		SELECT id, name, COALESCE(barcode, ''), category, cost_cents, selling_price_cents, stock, version, deleted_at, created_at, updated_at
 		FROM products
 		WHERE deleted_at IS NULL
 		ORDER BY created_at DESC, lower(name) ASC;`)
@@ -62,7 +63,7 @@ func (s *Store) ListProducts(ctx context.Context) ([]model.Product, error) {
 	products := make([]model.Product, 0)
 	for rows.Next() {
 		var product model.Product
-		if err := rows.Scan(&product.ID, &product.Name, &product.Barcode, &product.Category, &product.PriceCents, &product.Stock, &product.Version, &product.DeletedAt, &product.CreatedAt, &product.UpdatedAt); err != nil {
+		if err := rows.Scan(&product.ID, &product.Name, &product.Barcode, &product.Category, &product.CostCents, &product.SellingPriceCents, &product.Stock, &product.Version, &product.DeletedAt, &product.CreatedAt, &product.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan product: %w", err)
 		}
 		products = append(products, product)
@@ -83,11 +84,11 @@ func (s *Store) CreateProduct(ctx context.Context, input CreateProductInput) (mo
 
 	var product model.Product
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO products (id, name, barcode, category, price_cents, stock, updated_at, created_at)
-		VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $7)
-		RETURNING id, name, COALESCE(barcode, ''), category, price_cents, stock, version, deleted_at, created_at, updated_at;`,
-		newID("product"), strings.TrimSpace(input.Name), barcode, category, input.PriceCents, input.Stock, createdAt,
-	).Scan(&product.ID, &product.Name, &product.Barcode, &product.Category, &product.PriceCents, &product.Stock, &product.Version, &product.DeletedAt, &product.CreatedAt, &product.UpdatedAt)
+		INSERT INTO products (id, name, barcode, category, cost_cents, selling_price_cents, stock, updated_at, created_at)
+		VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $8)
+		RETURNING id, name, COALESCE(barcode, ''), category, cost_cents, selling_price_cents, stock, version, deleted_at, created_at, updated_at;`,
+		newID("product"), strings.TrimSpace(input.Name), barcode, category, input.CostCents, input.SellingPriceCents, input.Stock, createdAt,
+	).Scan(&product.ID, &product.Name, &product.Barcode, &product.Category, &product.CostCents, &product.SellingPriceCents, &product.Stock, &product.Version, &product.DeletedAt, &product.CreatedAt, &product.UpdatedAt)
 	if err != nil {
 		return model.Product{}, mapDatabaseError("create product", err)
 	}
@@ -97,9 +98,9 @@ func (s *Store) CreateProduct(ctx context.Context, input CreateProductInput) (mo
 func (s *Store) FindProductByBarcode(ctx context.Context, barcode string) (*model.Product, error) {
 	var product model.Product
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, name, COALESCE(barcode, ''), category, price_cents, stock, version, deleted_at, created_at, updated_at
+		SELECT id, name, COALESCE(barcode, ''), category, cost_cents, selling_price_cents, stock, version, deleted_at, created_at, updated_at
 		FROM products WHERE barcode = $1 AND deleted_at IS NULL LIMIT 1;`, strings.TrimSpace(barcode)).Scan(
-		&product.ID, &product.Name, &product.Barcode, &product.Category, &product.PriceCents, &product.Stock, &product.Version, &product.DeletedAt, &product.CreatedAt, &product.UpdatedAt,
+		&product.ID, &product.Name, &product.Barcode, &product.Category, &product.CostCents, &product.SellingPriceCents, &product.Stock, &product.Version, &product.DeletedAt, &product.CreatedAt, &product.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -264,8 +265,8 @@ func (s *Store) Checkout(ctx context.Context, input CheckoutInput) (model.Sale, 
 	for _, productID := range lockedOrder {
 		var product model.Product
 		err := tx.QueryRow(ctx, `
-			SELECT id, name, price_cents, stock
-			FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;`, productID).Scan(&product.ID, &product.Name, &product.PriceCents, &product.Stock)
+			SELECT id, name, selling_price_cents, stock
+			FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;`, productID).Scan(&product.ID, &product.Name, &product.SellingPriceCents, &product.Stock)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return model.Sale{}, ErrProductMissing
 		}
@@ -276,7 +277,7 @@ func (s *Store) Checkout(ctx context.Context, input CheckoutInput) (model.Sale, 
 		if product.Stock < quantity && !allow[productID] {
 			return model.Sale{}, &StockShortageError{ProductID: product.ID, ProductName: product.Name, Available: product.Stock, Requested: quantity}
 		}
-		products[productID] = model.SaleLine{ProductID: product.ID, Name: product.Name, Quantity: quantity, UnitPriceCents: product.PriceCents, LineTotalCents: product.PriceCents * quantity}
+		products[productID] = model.SaleLine{ProductID: product.ID, Name: product.Name, Quantity: quantity, UnitPriceCents: product.SellingPriceCents, LineTotalCents: product.SellingPriceCents * quantity}
 	}
 
 	createdAt := time.Now().UTC()

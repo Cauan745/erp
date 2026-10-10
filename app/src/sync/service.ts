@@ -23,7 +23,8 @@ type RemoteProduct = {
   name: string;
   barcode: string;
   category: string;
-  priceCents: number;
+  costCents: number | null;
+  sellingPriceCents: number;
   stock: number;
   version: number;
   deletedAt?: string | null;
@@ -290,18 +291,20 @@ async function upsertProduct(transaction: Database, product: RemoteProduct): Pro
 
   await transaction.runAsync(
     `INSERT INTO products
-      (id, name, barcode, category, price_cents, stock, version, deleted_at, updated_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, name, barcode, category, cost_cents, selling_price_cents, stock, version, deleted_at, updated_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name, barcode = excluded.barcode, category = excluded.category,
-       price_cents = excluded.price_cents, stock = excluded.stock, version = excluded.version,
+       cost_cents = excluded.cost_cents, selling_price_cents = excluded.selling_price_cents,
+       stock = excluded.stock, version = excluded.version,
        deleted_at = excluded.deleted_at, updated_at = excluded.updated_at
      WHERE products.version <= excluded.version;`,
     product.id,
     product.name,
     product.barcode || null,
     product.category,
-    product.priceCents,
+    product.costCents,
+    product.sellingPriceCents,
     product.stock,
     product.version,
     product.deletedAt ?? null,

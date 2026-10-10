@@ -52,11 +52,18 @@ export function ProductFormModal({
                 onChangeText={(name) => setForm((current) => ({ ...current, name }))}
               />
               <Field
-                label={t('products.price')}
-                value={form.price}
+                label={t('products.sellingPrice')}
+                value={form.sellingPrice}
                 placeholder={t('products.pricePlaceholder')}
                 keyboardType="decimal-pad"
-                onChangeText={(price) => setForm((current) => ({ ...current, price }))}
+                onChangeText={(sellingPrice) => setForm((current) => ({ ...current, sellingPrice }))}
+              />
+              <Field
+                label={<Text>{t('products.cost')} <Text style={styles.optional}>({t('common.optional')})</Text></Text>}
+                value={form.cost}
+                placeholder={t('products.pricePlaceholder')}
+                keyboardType="decimal-pad"
+                onChangeText={(cost) => setForm((current) => ({ ...current, cost }))}
               />
               {editing ? (
                 <Text style={styles.stockUpdateCurrent}>{t('products.currentStock', { count: form.stock })}</Text>

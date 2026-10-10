@@ -43,15 +43,16 @@ type productUpdateOperationPayload struct {
 }
 
 type syncProduct struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	Barcode    string    `json:"barcode"`
-	Category   string    `json:"category"`
-	PriceCents int64     `json:"priceCents"`
-	Stock      int64     `json:"stock"`
-	Version    int64     `json:"version"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	Barcode           string    `json:"barcode"`
+	Category          string    `json:"category"`
+	CostCents         *int64    `json:"costCents"`
+	SellingPriceCents int64     `json:"sellingPriceCents"`
+	Stock             int64     `json:"stock"`
+	Version           int64     `json:"version"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
 }
 
 type stockAdjustmentOperationPayload struct {
@@ -305,6 +306,9 @@ func (s *Store) applyProductCreate(ctx context.Context, tx pgx.Tx, operation mod
 	if payload.Product.ID != operation.AggregateID {
 		return nil, nil, &operationRejection{Code: "aggregate_mismatch", Message: "product aggregate does not match the operation"}
 	}
+	if payload.Product.SellingPriceCents < 0 || (payload.Product.CostCents != nil && *payload.Product.CostCents < 0) {
+		return nil, nil, &operationRejection{Code: "product_payload_invalid", Message: "product prices must be non-negative"}
+	}
 	if payload.Product.CreatedAt.IsZero() {
 		payload.Product.CreatedAt = time.Now().UTC()
 	}
@@ -315,8 +319,8 @@ func (s *Store) applyProductCreate(ctx context.Context, tx pgx.Tx, operation mod
 		payload.Product.Version = 1
 	}
 	_, err := tx.Exec(ctx, `
-		INSERT INTO products (id, name, barcode, category, price_cents, stock, version, updated_at, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);`, payload.Product.ID, payload.Product.Name, payload.Product.Barcode, payload.Product.Category, payload.Product.PriceCents, payload.Product.Stock, payload.Product.Version, payload.Product.UpdatedAt, payload.Product.CreatedAt)
+		INSERT INTO products (id, name, barcode, category, cost_cents, selling_price_cents, stock, version, updated_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);`, payload.Product.ID, payload.Product.Name, payload.Product.Barcode, payload.Product.Category, payload.Product.CostCents, payload.Product.SellingPriceCents, payload.Product.Stock, payload.Product.Version, payload.Product.UpdatedAt, payload.Product.CreatedAt)
 	if err != nil {
 		return nil, nil, productDatabaseRejection(err)
 	}
@@ -331,6 +335,9 @@ func (s *Store) applyProductUpdate(ctx context.Context, tx pgx.Tx, operation mod
 	var payload productUpdateOperationPayload
 	if err := json.Unmarshal(operation.Payload, &payload); err != nil || payload.Product.ID == "" {
 		return nil, nil, &operationRejection{Code: "product_payload_invalid", Message: "product payload is invalid"}
+	}
+	if payload.Product.SellingPriceCents < 0 || (payload.Product.CostCents != nil && *payload.Product.CostCents < 0) {
+		return nil, nil, &operationRejection{Code: "product_payload_invalid", Message: "product prices must be non-negative"}
 	}
 	product, err := loadProductForUpdate(ctx, tx, payload.Product.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -348,9 +355,9 @@ func (s *Store) applyProductUpdate(ctx context.Context, tx pgx.Tx, operation mod
 	}
 	_, err = tx.Exec(ctx, `
 		UPDATE products
-		SET name = $1, barcode = NULLIF($2, ''), category = $3, price_cents = $4,
-			version = version + 1, updated_at = $5
-		WHERE id = $6;`, payload.Product.Name, payload.Product.Barcode, payload.Product.Category, payload.Product.PriceCents, updatedAt, payload.Product.ID)
+		SET name = $1, barcode = NULLIF($2, ''), category = $3, cost_cents = $4, selling_price_cents = $5,
+			version = version + 1, updated_at = $6
+		WHERE id = $7;`, payload.Product.Name, payload.Product.Barcode, payload.Product.Category, payload.Product.CostCents, payload.Product.SellingPriceCents, updatedAt, payload.Product.ID)
 	if err != nil {
 		return nil, nil, productDatabaseRejection(err)
 	}
@@ -541,16 +548,16 @@ func (s *Store) applySaleCheckout(ctx context.Context, tx pgx.Tx, operation mode
 func loadProduct(ctx context.Context, tx pgx.Tx, id string) (*model.Product, error) {
 	var product model.Product
 	err := tx.QueryRow(ctx, `
-		SELECT id, name, COALESCE(barcode, ''), category, price_cents, stock, version, deleted_at, created_at, updated_at
-		FROM products WHERE id = $1;`, id).Scan(&product.ID, &product.Name, &product.Barcode, &product.Category, &product.PriceCents, &product.Stock, &product.Version, &product.DeletedAt, &product.CreatedAt, &product.UpdatedAt)
+		SELECT id, name, COALESCE(barcode, ''), category, cost_cents, selling_price_cents, stock, version, deleted_at, created_at, updated_at
+		FROM products WHERE id = $1;`, id).Scan(&product.ID, &product.Name, &product.Barcode, &product.Category, &product.CostCents, &product.SellingPriceCents, &product.Stock, &product.Version, &product.DeletedAt, &product.CreatedAt, &product.UpdatedAt)
 	return &product, err
 }
 
 func loadProductForUpdate(ctx context.Context, tx pgx.Tx, id string) (*model.Product, error) {
 	var product model.Product
 	err := tx.QueryRow(ctx, `
-		SELECT id, name, COALESCE(barcode, ''), category, price_cents, stock, version, deleted_at, created_at, updated_at
-		FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;`, id).Scan(&product.ID, &product.Name, &product.Barcode, &product.Category, &product.PriceCents, &product.Stock, &product.Version, &product.DeletedAt, &product.CreatedAt, &product.UpdatedAt)
+		SELECT id, name, COALESCE(barcode, ''), category, cost_cents, selling_price_cents, stock, version, deleted_at, created_at, updated_at
+		FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;`, id).Scan(&product.ID, &product.Name, &product.Barcode, &product.Category, &product.CostCents, &product.SellingPriceCents, &product.Stock, &product.Version, &product.DeletedAt, &product.CreatedAt, &product.UpdatedAt)
 	return &product, err
 }
 

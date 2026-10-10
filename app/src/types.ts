@@ -9,7 +9,8 @@ export type Cart = Record<string, CartLine>;
 
 export type ProductForm = {
   name: string;
-  price: string;
+  cost: string;
+  sellingPrice: string;
   stock: string;
   barcode: string;
   category: string;

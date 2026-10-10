@@ -1,10 +1,11 @@
+import { ReactNode } from 'react';
 import { Text, TextInput, View } from 'react-native';
 
 import { colors } from '../../constants';
 import { styles } from '../../styles';
 
 type FieldProps = {
-  label: string;
+  label: ReactNode;
   value: string;
   placeholder: string;
   onChangeText: (value: string) => void;

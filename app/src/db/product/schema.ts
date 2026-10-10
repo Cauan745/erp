@@ -4,7 +4,8 @@ export const CREATE_PRODUCTS_TABLE = `
     name TEXT NOT NULL,
     barcode TEXT,
     category TEXT NOT NULL DEFAULT 'General',
-    price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
+    cost_cents INTEGER CHECK (cost_cents >= 0),
+    selling_price_cents INTEGER NOT NULL CHECK (selling_price_cents >= 0),
     stock INTEGER NOT NULL DEFAULT 0,
     version INTEGER NOT NULL DEFAULT 1,
     deleted_at TEXT,
@@ -36,6 +37,11 @@ export const MIGRATE_PRODUCTS_TO_ALLOW_NEGATIVE_STOCK = `
   ALTER TABLE products_without_stock_check RENAME TO products;
 `;
 
+export const MIGRATE_PRODUCTS_TO_SELLING_PRICE = `
+  ALTER TABLE products RENAME COLUMN price_cents TO selling_price_cents;
+  ALTER TABLE products ADD COLUMN cost_cents INTEGER CHECK (cost_cents >= 0);
+`;
+
 export const CREATE_PRODUCT_INDEXES = `
   CREATE UNIQUE INDEX IF NOT EXISTS products_barcode_unique
     ON products(barcode)
@@ -54,7 +60,7 @@ export const SEED_PRODUCTS = [
     name: 'House Blend Coffee',
     barcode: '7891000100103',
     category: 'Beverages',
-    priceCents: 1890,
+    sellingPriceCents: 1890,
     stock: 24,
     createdAt: '2026-01-01T09:00:00.000Z'
   },
@@ -63,7 +69,7 @@ export const SEED_PRODUCTS = [
     name: 'Oat Milk 1L',
     barcode: '7891000100104',
     category: 'Beverages',
-    priceCents: 1250,
+    sellingPriceCents: 1250,
     stock: 16,
     createdAt: '2026-01-01T09:00:00.000Z'
   },
@@ -72,7 +78,7 @@ export const SEED_PRODUCTS = [
     name: 'Sourdough Loaf',
     barcode: null,
     category: 'Bakery',
-    priceCents: 2200,
+    sellingPriceCents: 2200,
     stock: 8,
     createdAt: '2026-01-01T09:00:00.000Z'
   }

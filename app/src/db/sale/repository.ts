@@ -28,7 +28,7 @@ type SaleItemRow = {
 type ProductForCheckout = {
   id: string;
   name: string;
-  price_cents: number;
+  selling_price_cents: number;
   stock: number;
 };
 
@@ -131,7 +131,7 @@ export async function checkout(
 
     for (const [productId, quantity] of requestedQuantities) {
       const product = await transaction.getFirstAsync<ProductForCheckout>(`
-        SELECT id, name, price_cents, stock
+        SELECT id, name, selling_price_cents, stock
         FROM products
         WHERE id = ? AND deleted_at IS NULL;
       `, productId);
@@ -150,14 +150,14 @@ export async function checkout(
         });
       }
 
-      const lineTotalCents = product.price_cents * quantity;
+      const lineTotalCents = product.selling_price_cents * quantity;
       saleLineRecords.push({
         productId: product.id,
         name: product.name,
         quantity,
-        unitPrice: product.price_cents / 100,
+        unitPrice: product.selling_price_cents / 100,
         lineTotal: lineTotalCents / 100,
-        unitPriceCents: product.price_cents,
+        unitPriceCents: product.selling_price_cents,
         lineTotalCents
       });
     }

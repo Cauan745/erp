@@ -36,11 +36,12 @@ func (s *Server) Handler() http.Handler {
 }
 
 type createProductRequest struct {
-	Name       string `json:"name"`
-	Barcode    string `json:"barcode"`
-	Category   string `json:"category"`
-	PriceCents int64  `json:"priceCents"`
-	Stock      int64  `json:"stock"`
+	Name              string `json:"name"`
+	Barcode           string `json:"barcode"`
+	Category          string `json:"category"`
+	CostCents         *int64 `json:"costCents"`
+	SellingPriceCents int64  `json:"sellingPriceCents"`
+	Stock             int64  `json:"stock"`
 }
 
 type stockAdjustmentRequest struct {
@@ -85,13 +86,13 @@ func (s *Server) createProduct(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "product_name_required", "name is required", nil)
 		return
 	}
-	if request.PriceCents < 0 {
-		writeError(w, http.StatusBadRequest, "product_price_invalid", "priceCents must be non-negative", nil)
+	if request.SellingPriceCents < 0 || (request.CostCents != nil && *request.CostCents < 0) {
+		writeError(w, http.StatusBadRequest, "product_price_invalid", "sellingPriceCents and costCents must be non-negative", nil)
 		return
 	}
 
 	product, err := s.store.CreateProduct(r.Context(), repository.CreateProductInput{
-		Name: request.Name, Barcode: request.Barcode, Category: request.Category, PriceCents: request.PriceCents, Stock: request.Stock,
+		Name: request.Name, Barcode: request.Barcode, Category: request.Category, CostCents: request.CostCents, SellingPriceCents: request.SellingPriceCents, Stock: request.Stock,
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "barcode already exists") {

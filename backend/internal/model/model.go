@@ -3,16 +3,17 @@ package model
 import "time"
 
 type Product struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	Barcode    string     `json:"barcode"`
-	Category   string     `json:"category"`
-	PriceCents int64      `json:"priceCents"`
-	Stock      int64      `json:"stock"`
-	Version    int64      `json:"version"`
-	DeletedAt  *time.Time `json:"deletedAt,omitempty"`
-	CreatedAt  time.Time  `json:"createdAt"`
-	UpdatedAt  time.Time  `json:"updatedAt"`
+	ID                string     `json:"id"`
+	Name              string     `json:"name"`
+	Barcode           string     `json:"barcode"`
+	Category          string     `json:"category"`
+	CostCents         *int64     `json:"costCents"`
+	SellingPriceCents int64      `json:"sellingPriceCents"`
+	Stock             int64      `json:"stock"`
+	Version           int64      `json:"version"`
+	DeletedAt         *time.Time `json:"deletedAt,omitempty"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	UpdatedAt         time.Time  `json:"updatedAt"`
 }
 
 type SaleLine struct {
