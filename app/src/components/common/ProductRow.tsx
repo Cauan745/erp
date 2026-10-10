@@ -27,9 +27,9 @@ export function ProductRow({ product, onPress, onStockUpdate, onEdit, compact = 
       </View>
       <View style={styles.productRight}>
         <Text style={styles.productPrice}>{money(product.price, locale)}</Text>
+        <Text style={styles.muted}>{t('common.inStock', { count: product.stock })}</Text>
         {onPress ? <Text style={styles.addHint}>{t('common.add')}</Text> : (
           <>
-            <Text style={styles.muted}>{t('common.inStock', { count: product.stock })}</Text>
             {onEdit ? (
               <Pressable onPress={onEdit} hitSlop={8}>
                 <Text style={styles.addHint}>{t('products.editProduct')}</Text>
