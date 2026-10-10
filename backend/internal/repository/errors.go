@@ -7,6 +7,8 @@ var (
 	ErrStockAdjustmentMissing = fmt.Errorf("stock adjustment missing")
 	ErrEmptySale              = fmt.Errorf("empty sale")
 	ErrInvalidQuantity        = fmt.Errorf("invalid quantity")
+	ErrInvalidPaymentMethod   = fmt.Errorf("invalid payment method")
+	ErrInvalidCashReceived    = fmt.Errorf("invalid cash received")
 )
 
 type StockShortageError struct {

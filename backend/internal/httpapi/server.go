@@ -53,7 +53,9 @@ type updateReasonRequest struct {
 }
 
 type checkoutRequest struct {
-	Lines []struct {
+	PaymentMethod     string `json:"paymentMethod"`
+	CashReceivedCents *int64 `json:"cashReceivedCents"`
+	Lines             []struct {
 		ProductID string `json:"productId"`
 		Quantity  int64  `json:"quantity"`
 	} `json:"lines"`
@@ -193,7 +195,11 @@ func (s *Server) checkout(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	input := repository.CheckoutInput{AllowInsufficientStockProductIDs: request.AllowInsufficientStockProductIDs}
+	input := repository.CheckoutInput{
+		AllowInsufficientStockProductIDs: request.AllowInsufficientStockProductIDs,
+		PaymentMethod:                    request.PaymentMethod,
+		CashReceivedCents:                request.CashReceivedCents,
+	}
 	for _, line := range request.Lines {
 		input.Lines = append(input.Lines, repository.CheckoutLine{ProductID: strings.TrimSpace(line.ProductID), Quantity: line.Quantity})
 	}
@@ -205,6 +211,10 @@ func (s *Server) checkout(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "empty_sale", "at least one sale line is required", nil)
 		case errors.Is(err, repository.ErrInvalidQuantity):
 			writeError(w, http.StatusBadRequest, "sale_quantity_invalid", "sale quantities must be positive integers", nil)
+		case errors.Is(err, repository.ErrInvalidPaymentMethod):
+			writeError(w, http.StatusBadRequest, "payment_method_invalid", "payment method is invalid", nil)
+		case errors.Is(err, repository.ErrInvalidCashReceived):
+			writeError(w, http.StatusBadRequest, "cash_received_invalid", "cash received must cover the sale total", nil)
 		case errors.Is(err, repository.ErrProductMissing):
 			writeError(w, http.StatusNotFound, "product_missing", "product was not found", nil)
 		case errors.As(err, &shortage):

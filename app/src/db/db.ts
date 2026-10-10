@@ -6,7 +6,12 @@ import {
   MIGRATE_PRODUCTS_TO_ALLOW_NEGATIVE_STOCK,
   SEED_PRODUCTS
 } from './product/schema';
-import { CREATE_SALES_TABLE, CREATE_SALE_INDEXES } from './sale/schema';
+import {
+  CREATE_SALES_TABLE,
+  CREATE_SALE_INDEXES,
+  MIGRATE_SALES_TO_PAYMENT_METHODS,
+  MIGRATE_SALES_TO_REMOVE_CHANGE
+} from './sale/schema';
 import { CREATE_STOCK_ADJUSTMENTS_TABLE, CREATE_STOCK_ADJUSTMENT_INDEXES } from './stock/schema';
 import {
   CREATE_SYNC_CONFLICTS_TABLE,
@@ -18,7 +23,7 @@ import {
 } from './sync/schema';
 
 const DATABASE_NAME = 'stockroom';
-const DATABASE_VERSION = 5;
+const DATABASE_VERSION = 7;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | undefined;
 
@@ -33,9 +38,11 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
 
     const needsStockConstraintMigration = currentVersion >= 1 && currentVersion < 2;
     const needsSyncMigration = currentVersion >= 2 && currentVersion < 4;
+    const needsPaymentMigration = currentVersion >= 1 && currentVersion < 6;
+    const needsChangeMigration = currentVersion >= 6 && currentVersion < 7;
 
     if (currentVersion < DATABASE_VERSION) {
-      if (needsStockConstraintMigration) {
+      if (needsStockConstraintMigration || needsPaymentMigration || needsChangeMigration) {
         await database.execAsync('PRAGMA foreign_keys = OFF;');
       }
 
@@ -46,6 +53,8 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
             CREATE_SALES_TABLE,
             needsStockConstraintMigration ? MIGRATE_PRODUCTS_TO_ALLOW_NEGATIVE_STOCK : '',
             needsSyncMigration ? MIGRATE_PRODUCTS_TO_ADD_SYNC_COLUMNS : '',
+            needsPaymentMigration ? MIGRATE_SALES_TO_PAYMENT_METHODS : '',
+            needsChangeMigration ? MIGRATE_SALES_TO_REMOVE_CHANGE : '',
             CREATE_STOCK_ADJUSTMENTS_TABLE,
             CREATE_PRODUCT_INDEXES,
             CREATE_SALE_INDEXES,
@@ -77,7 +86,7 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
           await database.execAsync(`PRAGMA user_version = ${DATABASE_VERSION};`);
         });
       } finally {
-        if (needsStockConstraintMigration) {
+        if (needsStockConstraintMigration || needsPaymentMigration || needsChangeMigration) {
           await database.execAsync('PRAGMA foreign_keys = ON;');
         }
       }

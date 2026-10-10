@@ -10,6 +10,7 @@ import {
   retryOperationAfterNetworkFailure
 } from '../db/sync/repository';
 import { SyncOutboxOperation } from '../db/sync/types';
+import { PaymentMethod } from '../db/sale/types';
 import { pullChanges, PullChange, PushResult, pushOperations, SyncApiError } from './api';
 import { registerBackgroundSync } from './background';
 
@@ -39,7 +40,8 @@ type RemoteAdjustment = {
 type RemoteSale = {
   id: string;
   totalCents: number;
-  paymentMethod: 'cash';
+  paymentMethod: PaymentMethod;
+  cashReceivedCents?: number | null;
   createdAt: string;
 };
 
@@ -298,12 +300,17 @@ async function upsertAdjustment(transaction: Database, adjustment: RemoteAdjustm
 
 async function upsertSale(transaction: Database, sale: RemoteSale, lines: RemoteSaleLine[]): Promise<void> {
   await transaction.runAsync(
-    `INSERT INTO sales (id, total_cents, payment_method, created_at)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET total_cents = excluded.total_cents, payment_method = excluded.payment_method;`,
+    `INSERT INTO sales
+      (id, total_cents, payment_method, cash_received_cents, created_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       total_cents = excluded.total_cents,
+       payment_method = excluded.payment_method,
+       cash_received_cents = excluded.cash_received_cents;`,
     sale.id,
     sale.totalCents,
     sale.paymentMethod,
+    sale.cashReceivedCents ?? null,
     sale.createdAt
   );
   for (const line of lines) {

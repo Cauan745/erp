@@ -9,6 +9,8 @@ export type AppErrorCode =
   | 'stockQuantityPositive'
   | 'emptySale'
   | 'saleQuantityPositive'
+  | 'paymentMethodInvalid'
+  | 'cashReceivedInvalid'
   | 'stockReservation'
   | 'saleTransaction'
   | 'unknown';

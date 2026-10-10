@@ -7,6 +7,20 @@ export const money = (value: number, locale: Locale = 'pt-BR') =>
     currency: 'BRL'
   }).format(value);
 
+export function parseMoneyToCents(value: string, locale: Locale = 'pt-BR'): number | null {
+  const trimmed = value.trim().replace(/[^\d,.-]/g, '');
+  if (!trimmed) return null;
+
+  const normalized = locale === 'pt-BR' && trimmed.includes(',')
+    ? trimmed.replace(/\./g, '').replace(',', '.')
+    : trimmed.replace(/,/g, '');
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+
+  const cents = Math.round(parsed * 100);
+  return Number.isSafeInteger(cents) ? cents : null;
+}
+
 export const shortDate = (value: string, locale: Locale = 'pt-BR') =>
   new Intl.DateTimeFormat(locale, {
     day: '2-digit',
@@ -26,6 +40,8 @@ const errorKeys: Record<AppErrorCode, TranslationKey> = {
   stockQuantityPositive: 'errors.stockQuantityPositive',
   emptySale: 'errors.emptySale',
   saleQuantityPositive: 'errors.saleQuantityPositive',
+  paymentMethodInvalid: 'errors.paymentMethodInvalid',
+  cashReceivedInvalid: 'errors.cashReceivedInvalid',
   stockReservation: 'errors.stockReservation',
   saleTransaction: 'errors.saleTransaction',
   unknown: 'errors.unknown'

@@ -44,6 +44,8 @@ type CheckoutLine struct {
 type CheckoutInput struct {
 	Lines                            []CheckoutLine
 	AllowInsufficientStockProductIDs []string
+	PaymentMethod                    string
+	CashReceivedCents                *int64
 }
 
 func (s *Store) ListProducts(ctx context.Context) ([]model.Product, error) {
@@ -181,7 +183,7 @@ func (s *Store) ListStockHistory(ctx context.Context, limit int) ([]model.StockH
 }
 
 func (s *Store) ListSales(ctx context.Context) ([]model.Sale, error) {
-	saleRows, err := s.pool.Query(ctx, `SELECT id, total_cents, payment_method, created_at FROM sales ORDER BY created_at DESC`)
+	saleRows, err := s.pool.Query(ctx, `SELECT id, total_cents, payment_method, cash_received_cents, created_at FROM sales ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list sales: %w", err)
 	}
@@ -190,7 +192,7 @@ func (s *Store) ListSales(ctx context.Context) ([]model.Sale, error) {
 	byID := make(map[string]int)
 	for saleRows.Next() {
 		var sale model.Sale
-		if err := saleRows.Scan(&sale.ID, &sale.TotalCents, &sale.PaymentMethod, &sale.CreatedAt); err != nil {
+		if err := saleRows.Scan(&sale.ID, &sale.TotalCents, &sale.PaymentMethod, &sale.CashReceivedCents, &sale.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan sale: %w", err)
 		}
 		sale.Lines = []model.SaleLine{}
@@ -225,6 +227,13 @@ func (s *Store) ListSales(ctx context.Context) ([]model.Sale, error) {
 func (s *Store) Checkout(ctx context.Context, input CheckoutInput) (model.Sale, error) {
 	if len(input.Lines) == 0 {
 		return model.Sale{}, ErrEmptySale
+	}
+	paymentMethod := input.PaymentMethod
+	if paymentMethod == "" {
+		paymentMethod = "cash"
+	}
+	if paymentMethod != "cash" && paymentMethod != "debit_card" && paymentMethod != "credit_card" && paymentMethod != "pix" {
+		return model.Sale{}, ErrInvalidPaymentMethod
 	}
 
 	requested := make(map[string]int64)
@@ -282,7 +291,18 @@ func (s *Store) Checkout(ctx context.Context, input CheckoutInput) (model.Sale, 
 		lines = append(lines, line)
 		totalCents += line.LineTotalCents
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO sales (id, total_cents, payment_method, created_at) VALUES ($1, $2, 'cash', $3)`, saleID, totalCents, createdAt); err != nil {
+	var cashReceivedCents *int64
+	if paymentMethod == "cash" {
+		received := totalCents
+		if input.CashReceivedCents != nil {
+			received = *input.CashReceivedCents
+		}
+		if received < totalCents {
+			return model.Sale{}, ErrInvalidCashReceived
+		}
+		cashReceivedCents = &received
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO sales (id, total_cents, payment_method, cash_received_cents, created_at) VALUES ($1, $2, $3, $4, $5)`, saleID, totalCents, paymentMethod, cashReceivedCents, createdAt); err != nil {
 		return model.Sale{}, fmt.Errorf("insert sale: %w", err)
 	}
 	for lineNumber, line := range lines {
@@ -295,7 +315,7 @@ func (s *Store) Checkout(ctx context.Context, input CheckoutInput) (model.Sale, 
 	if err := tx.Commit(ctx); err != nil {
 		return model.Sale{}, fmt.Errorf("commit checkout: %w", err)
 	}
-	return model.Sale{ID: saleID, Lines: lines, TotalCents: totalCents, PaymentMethod: "cash", CreatedAt: createdAt}, nil
+	return model.Sale{ID: saleID, Lines: lines, TotalCents: totalCents, PaymentMethod: paymentMethod, CashReceivedCents: cashReceivedCents, CreatedAt: createdAt}, nil
 }
 
 func mapDatabaseError(operation string, err error) error {

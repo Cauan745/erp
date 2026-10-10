@@ -16,7 +16,7 @@ import {
   updateStockAdjustmentReason
 } from '../db';
 import { Product } from '../db/product/types';
-import { Sale } from '../db/sale/types';
+import { PaymentMethod, Sale } from '../db/sale/types';
 import { StockHistoryEntry } from '../db/stock/types';
 import { errorMessage } from '../formatters';
 import { useI18n } from '../i18n';
@@ -360,7 +360,11 @@ export function useAppState() {
     }
   };
 
-  const retryCheckoutAfterAddingStock = async (shortage: InsufficientStockError['shortage']) => {
+  const retryCheckoutAfterAddingStock = async (
+    shortage: InsufficientStockError['shortage'],
+    paymentMethod: PaymentMethod,
+    cashReceivedCents: number | null
+  ) => {
     try {
       await addProductStock(
         shortage.productId,
@@ -373,10 +377,10 @@ export function useAppState() {
       return;
     }
 
-    await completeCheckout();
+    await completeCheckout(paymentMethod, cashReceivedCents);
   };
 
-  const completeCheckout = async (extraAllowedProductId?: string): Promise<void> => {
+  const completeCheckout = async (paymentMethod: PaymentMethod, cashReceivedCents: number | null, extraAllowedProductId?: string): Promise<void> => {
     if (!cartLines.length) return;
     try {
       const allowInsufficientStockProductIds = cartLines
@@ -385,7 +389,11 @@ export function useAppState() {
       if (extraAllowedProductId && !allowInsufficientStockProductIds.includes(extraAllowedProductId)) {
         allowInsufficientStockProductIds.push(extraAllowedProductId);
       }
-      await checkout(cartLines, { allowInsufficientStockProductIds });
+      await checkout(cartLines, {
+        allowInsufficientStockProductIds,
+        paymentMethod,
+        ...(cashReceivedCents === null ? {} : { cashReceivedCents })
+      });
       setCart({});
       setCheckoutOpen(false);
       setCartOpen(false);
@@ -406,11 +414,11 @@ export function useAppState() {
             { text: t('common.cancel'), style: 'cancel' },
             {
               text: t('alerts.addStockForSale', { quantity: shortage.requested - shortage.available }),
-              onPress: () => { void retryCheckoutAfterAddingStock(shortage); }
+              onPress: () => { void retryCheckoutAfterAddingStock(shortage, paymentMethod, cashReceivedCents); }
             },
             {
               text: t('sell.sellAnyway'),
-              onPress: () => { void completeCheckout(shortage.productId); }
+              onPress: () => { void completeCheckout(paymentMethod, cashReceivedCents, shortage.productId); }
             }
           ]
         );

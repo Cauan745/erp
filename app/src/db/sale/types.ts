@@ -6,10 +6,13 @@ export type SaleLine = {
   lineTotal: number;
 };
 
+export type PaymentMethod = 'cash' | 'debit_card' | 'credit_card' | 'pix';
+
 export type Sale = {
   id: string;
   lines: SaleLine[];
   total: number;
-  paymentMethod: 'cash';
+  paymentMethod: PaymentMethod;
+  cashReceived: number | null;
   createdAt: string;
 };

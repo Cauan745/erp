@@ -78,10 +78,11 @@ type saleOperationPayload struct {
 }
 
 type syncSale struct {
-	ID            string    `json:"id"`
-	TotalCents    int64     `json:"totalCents"`
-	PaymentMethod string    `json:"paymentMethod"`
-	CreatedAt     time.Time `json:"createdAt"`
+	ID                string    `json:"id"`
+	TotalCents        int64     `json:"totalCents"`
+	PaymentMethod     string    `json:"paymentMethod"`
+	CashReceivedCents *int64    `json:"cashReceivedCents"`
+	CreatedAt         time.Time `json:"createdAt"`
 }
 
 type syncSaleLine struct {
@@ -450,8 +451,22 @@ func (s *Store) applySaleCheckout(ctx context.Context, tx pgx.Tx, operation mode
 	if err := json.Unmarshal(operation.Payload, &payload); err != nil || payload.Sale.ID == "" || len(payload.Lines) == 0 {
 		return nil, nil, &operationRejection{Code: "sale_payload_invalid", Message: "sale payload is invalid"}
 	}
-	if payload.Sale.ID != operation.AggregateID || payload.Sale.PaymentMethod != "cash" {
+	if payload.Sale.ID != operation.AggregateID ||
+		(payload.Sale.PaymentMethod != "cash" && payload.Sale.PaymentMethod != "debit_card" && payload.Sale.PaymentMethod != "credit_card" && payload.Sale.PaymentMethod != "pix") {
 		return nil, nil, &operationRejection{Code: "sale_payload_invalid", Message: "sale aggregate or payment method is invalid"}
+	}
+	sale := payload.Sale
+	if sale.PaymentMethod == "cash" {
+		received := sale.TotalCents
+		if sale.CashReceivedCents != nil {
+			received = *sale.CashReceivedCents
+		}
+		if received < sale.TotalCents {
+			return nil, nil, &operationRejection{Code: "cash_received_invalid", Message: "cash received does not cover the sale total"}
+		}
+		sale.CashReceivedCents = &received
+	} else if sale.CashReceivedCents != nil {
+		return nil, nil, &operationRejection{Code: "sale_payload_invalid", Message: "non-cash sales cannot include cash received"}
 	}
 	var totalCents int64
 	requested := make(map[string]int64)
@@ -493,7 +508,7 @@ func (s *Store) applySaleCheckout(ctx context.Context, tx pgx.Tx, operation mode
 	if createdAt.IsZero() {
 		createdAt = time.Now().UTC()
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO sales (id, total_cents, payment_method, created_at) VALUES ($1, $2, $3, $4)`, payload.Sale.ID, payload.Sale.TotalCents, payload.Sale.PaymentMethod, createdAt); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO sales (id, total_cents, payment_method, cash_received_cents, created_at) VALUES ($1, $2, $3, $4, $5)`, sale.ID, sale.TotalCents, sale.PaymentMethod, sale.CashReceivedCents, createdAt); err != nil {
 		return nil, nil, productDatabaseRejection(err)
 	}
 	for _, line := range payload.Lines {
@@ -518,8 +533,8 @@ func (s *Store) applySaleCheckout(ctx context.Context, tx pgx.Tx, operation mode
 		updatedProducts = append(updatedProducts, *product)
 		changes = append(changes, changeToRecord{OperationID: operation.OperationID, EntityType: "product", EntityID: product.ID, ChangeType: "upsert", Payload: map[string]any{"product": product}, OccurredAt: createdAt})
 	}
-	changePayload := map[string]any{"sale": payload.Sale, "lines": payload.Lines, "products": updatedProducts}
-	changes = append(changes, changeToRecord{OperationID: operation.OperationID, EntityType: "sale", EntityID: payload.Sale.ID, ChangeType: "upsert", Payload: changePayload, OccurredAt: createdAt})
+	changePayload := map[string]any{"sale": sale, "lines": payload.Lines, "products": updatedProducts}
+	changes = append(changes, changeToRecord{OperationID: operation.OperationID, EntityType: "sale", EntityID: sale.ID, ChangeType: "upsert", Payload: changePayload, OccurredAt: createdAt})
 	return changePayload, changes, nil
 }
 

@@ -24,11 +24,12 @@ type SaleLine struct {
 }
 
 type Sale struct {
-	ID            string     `json:"id"`
-	Lines         []SaleLine `json:"lines"`
-	TotalCents    int64      `json:"totalCents"`
-	PaymentMethod string     `json:"paymentMethod"`
-	CreatedAt     time.Time  `json:"createdAt"`
+	ID                string     `json:"id"`
+	Lines             []SaleLine `json:"lines"`
+	TotalCents        int64      `json:"totalCents"`
+	PaymentMethod     string     `json:"paymentMethod"`
+	CashReceivedCents *int64     `json:"cashReceivedCents,omitempty"`
+	CreatedAt         time.Time  `json:"createdAt"`
 }
 
 type StockHistoryEntry struct {

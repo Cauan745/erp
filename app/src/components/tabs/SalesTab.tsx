@@ -1,6 +1,6 @@
 import { ScrollView, Text, View } from 'react-native';
 
-import { Sale } from '../../db/sale/types';
+import { PaymentMethod, Sale } from '../../db/sale/types';
 import { money, shortDate } from '../../formatters';
 import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
@@ -10,6 +10,12 @@ import { Stat } from '../common/Stat';
 export function SalesTab({ sales }: { sales: Sale[] }) {
   const { locale, t } = useI18n();
   const revenue = sales.reduce((sum, sale) => sum + sale.total, 0);
+  const paymentLabels: Record<PaymentMethod, 'sales.cash' | 'sales.debitCard' | 'sales.creditCard' | 'sales.pix'> = {
+    cash: 'sales.cash',
+    debit_card: 'sales.debitCard',
+    credit_card: 'sales.creditCard',
+    pix: 'sales.pix'
+  };
 
   return (
     <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
@@ -24,7 +30,10 @@ export function SalesTab({ sales }: { sales: Sale[] }) {
         <View style={styles.saleCard} key={sale.id}>
           <View>
             <Text style={styles.saleTitle}>{t('common.itemCount', { count: sale.lines.reduce((sum, line) => sum + line.quantity, 0) })}</Text>
-            <Text style={styles.muted}>{shortDate(sale.createdAt, locale)} · {t('sales.cash')}</Text>
+            <Text style={styles.muted}>{shortDate(sale.createdAt, locale)} · {t(paymentLabels[sale.paymentMethod])}</Text>
+            {sale.paymentMethod === 'cash' ? (
+              <Text style={styles.muted}>{t('sales.change')}: {money(Math.max(0, (sale.cashReceived ?? sale.total) - sale.total), locale)}</Text>
+            ) : null}
           </View>
           <Text style={styles.saleTotal}>{money(sale.total, locale)}</Text>
         </View>

@@ -10,7 +10,7 @@ The current app scope is:
 
 - Scan product barcodes.
 - Add products to a cart.
-- Check out cash sales.
+- Check out sales with cash, debit card, credit card, or Pix.
 - Store products, stock, and sales on the device.
 
 Object recognition, accounts, and device identity are planned work. Cross-device sync is implemented through `app/src/sync/` and the backend sync endpoints.
@@ -49,6 +49,7 @@ Do not reintroduce RxDB or its storage plugin unless the user explicitly asks fo
 - `app/app.json` configures Expo, VisionCamera permissions, and the SQLite plugin.
 - `backend/internal/database/migrations/001_init.sql` defines the PostgreSQL schema and seed products.
 - `backend/internal/database/migrations/002_sync.sql` adds server operation records, product versions, tombstones, and the ordered change log.
+- `backend/internal/database/migrations/003_payment_methods.sql` adds payment method fields for checkout and cash change.
 - `backend/internal/repository/repository.go` contains PostgreSQL product, stock, history, and checkout operations.
 - `backend/internal/repository/sync.go` processes idempotent operations and records the server change log.
 - `backend/internal/httpapi/server.go` defines the JSON API, sync push/pull endpoints, and stable error codes.
@@ -63,12 +64,16 @@ Do not reintroduce RxDB or its storage plugin unless the user explicitly asks fo
 - Store money in integer cents in SQLite columns such as `price_cents` and `total_cents`.
 - Convert cents to decimal numbers only at the repository boundary used by the UI.
 - Use parameterized SQLite queries for user or document values.
-- The current mobile `DATABASE_VERSION` is `5`. Increment it for every later SQLite schema change.
+- The current mobile `DATABASE_VERSION` is `7`. Increment it for every later SQLite schema change.
+- The project is in beta and has no production users yet. Prefer a direct schema over compatibility columns for unused legacy behavior. Do not add a parallel field just to preserve an old constraint when the canonical field can be migrated directly.
 - Apply mobile schema changes inside the versioned transaction in `app/src/db/db.ts`. Apply backend schema changes in ordered files under `backend/internal/database/migrations/`.
-- Preserve existing local data during migrations. Do not delete or recreate tables as a shortcut.
+- Preserve existing local data during migrations. Do not delete or recreate tables as a shortcut. If SQLite cannot alter a constraint in place, use an explicit transactional copy migration that preserves dependent rows and indexes, and document why it is required.
 - Keep the partial unique barcode index. Empty barcodes must remain allowed, but non-empty barcodes must be unique.
 - Checkout must remain transactional. It validates stock, decrements stock, inserts the sale, and inserts sale items as one operation.
+- `sales.payment_method` is the canonical payment field. Its allowed values are `cash`, `debit_card`, `credit_card`, and `pix`. Do not introduce a compatibility or detail column for these methods.
+- Cash checkout stores `cash_received_cents`; derive change as `cash_received_cents - total_cents`. Non-cash checkout stores no cash amount. Validate cash received in cents before committing the sale.
 - Sale items must keep product name and price snapshots so sale history remains stable after a product changes.
+- Keep `sale_items.line_total_cents` even though the current MVP can derive it from quantity and unit price. Future discounts, promotions, taxes, and rounding rules may make the final line amount differ from that multiplication.
 - Keep stock validation for normal checkout, but allow the explicit "Sell anyway" override to make stock negative.
 - Store manual signed stock changes in `stock_adjustments`; each manual change must update `products.stock` and insert its history row in one transaction.
 - Allow the user to edit only reasons stored in `stock_adjustments`; sale-derived history rows are read-only. Use the history `source` field to distinguish them, never the reason text, because a manual reason may equal `Venda` or another sale label.

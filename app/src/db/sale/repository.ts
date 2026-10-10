@@ -1,6 +1,6 @@
 import { getDatabase } from '../db';
 import { AppError } from '../../errors';
-import { Sale, SaleLine } from './types';
+import { PaymentMethod, Sale, SaleLine } from './types';
 import { createUuid } from '../ids';
 import { runInTransaction } from '../transactions';
 import { enqueueOperation } from '../sync/repository';
@@ -9,7 +9,8 @@ import { SYNC_OPERATION_TYPES } from '../sync/types';
 type SaleRow = {
   id: string;
   total_cents: number;
-  payment_method: 'cash';
+  payment_method: PaymentMethod;
+  cash_received_cents: number | null;
   created_at: string;
 };
 
@@ -46,6 +47,8 @@ export type StockShortage = {
 export type CheckoutOptions = {
   allowInsufficientStock?: boolean;
   allowInsufficientStockProductIds?: readonly string[];
+  paymentMethod?: PaymentMethod;
+  cashReceivedCents?: number;
 };
 
 export class InsufficientStockError extends AppError {
@@ -70,7 +73,7 @@ export async function listSales(): Promise<Sale[]> {
   const database = await getDatabase();
   const [sales, items] = await Promise.all([
     database.getAllAsync<SaleRow>(`
-      SELECT id, total_cents, payment_method, created_at
+      SELECT id, total_cents, payment_method, cash_received_cents, created_at
       FROM sales
       ORDER BY created_at DESC;
     `),
@@ -93,6 +96,7 @@ export async function listSales(): Promise<Sale[]> {
     lines: (itemsBySale.get(sale.id) ?? []).map(lineFromRow),
     total: sale.total_cents / 100,
     paymentMethod: sale.payment_method,
+    cashReceived: sale.cash_received_cents === null ? null : sale.cash_received_cents / 100,
     createdAt: sale.created_at
   }));
 }
@@ -159,6 +163,17 @@ export async function checkout(
     }
 
     const totalCents = saleLineRecords.reduce((sum, line) => sum + line.lineTotalCents, 0);
+    const paymentMethod = options.paymentMethod ?? 'cash';
+    if (!['cash', 'debit_card', 'credit_card', 'pix'].includes(paymentMethod)) {
+      throw new AppError('paymentMethodInvalid');
+    }
+    const cashReceivedCents = paymentMethod === 'cash'
+      ? options.cashReceivedCents ?? totalCents
+      : null;
+    const receivedCents = cashReceivedCents ?? -1;
+    if (paymentMethod === 'cash' && (!Number.isSafeInteger(receivedCents) || receivedCents < totalCents)) {
+      throw new AppError('cashReceivedInvalid');
+    }
 
     for (const line of saleLineRecords) {
       const allowInsufficientStock = options.allowInsufficientStock
@@ -188,11 +203,13 @@ export async function checkout(
     }
 
     await transaction.runAsync(
-      `INSERT INTO sales (id, total_cents, payment_method, created_at)
-       VALUES (?, ?, ?, ?);`,
+      `INSERT INTO sales
+        (id, total_cents, payment_method, cash_received_cents, created_at)
+       VALUES (?, ?, ?, ?, ?);`,
       saleId,
       totalCents,
-      'cash',
+      paymentMethod,
+      cashReceivedCents,
       createdAt
     );
 
@@ -241,7 +258,7 @@ export async function checkout(
       operationType: SYNC_OPERATION_TYPES.saleCheckout,
       aggregateId: saleId,
       payload: {
-        sale: { id: saleId, totalCents, paymentMethod: 'cash', createdAt },
+        sale: { id: saleId, totalCents, paymentMethod, cashReceivedCents, createdAt },
         lines: syncLines,
         allowInsufficientStockProductIds: allowedProductIds
       },
@@ -252,7 +269,8 @@ export async function checkout(
       id: saleId,
       lines: saleLineRecords.map(({ unitPriceCents, lineTotalCents, ...line }) => line),
       total: totalCents / 100,
-      paymentMethod: 'cash',
+      paymentMethod,
+      cashReceived: cashReceivedCents === null ? null : cashReceivedCents / 100,
       createdAt
     };
   });
