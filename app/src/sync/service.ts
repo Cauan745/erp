@@ -7,12 +7,14 @@ import {
   claimPendingOperations,
   failOperation,
   getSyncState,
+  listOutboxOperations,
   retryOperationAfterNetworkFailure
 } from '../db/sync/repository';
 import { SyncOutboxOperation } from '../db/sync/types';
 import { PaymentMethod } from '../db/sale/types';
 import { pullChanges, PullChange, PushResult, pushOperations, SyncApiError } from './api';
 import { registerBackgroundSync } from './background';
+import { setSyncStatus } from './status';
 
 const SYNC_CURSOR_KEY = 'server_cursor';
 
@@ -75,9 +77,32 @@ export type SyncSummary = {
 
 export async function synchronize(): Promise<SyncSummary> {
   if (syncPromise) return syncPromise;
-  syncPromise = synchronizeInternal().finally(() => {
-    syncPromise = undefined;
-  });
+  setSyncStatus('syncing');
+  syncPromise = synchronizeInternal()
+    .then(async (summary) => {
+      const operations = await listOutboxOperations();
+      const pendingCount = operations.filter((operation) => operation.status !== 'acknowledged').length;
+      const hasPermanentFailure = operations.some(
+        (operation) => operation.status === 'failed' && !operation.retryable
+      );
+
+      if (summary.error || summary.rejected > 0 || hasPermanentFailure) {
+        setSyncStatus('error', { pendingCount, error: summary.error ?? 'sync rejected' });
+      } else if (pendingCount > 0) {
+        setSyncStatus('pending', { pendingCount });
+      } else {
+        setSyncStatus('synced', { pendingCount: 0 });
+      }
+
+      return summary;
+    })
+    .catch((error) => {
+      setSyncStatus('error', { error: error instanceof Error ? error.message : 'sync failed' });
+      throw error;
+    })
+    .finally(() => {
+      syncPromise = undefined;
+    });
   return syncPromise;
 }
 

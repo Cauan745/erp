@@ -13,7 +13,7 @@ export const styles = StyleSheet.create({
   eyebrow: { color: colors.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.3 },
   title: { color: colors.text, fontSize: 30, fontWeight: '800', letterSpacing: -1.4, marginTop: 3 },
   syncPill: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: colors.panel, borderColor: colors.border, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 20 },
-  greenDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent },
+  syncDot: { width: 7, height: 7, borderRadius: 4 },
   syncText: { color: colors.text, fontSize: 12, fontWeight: '600' },
   content: { flex: 1 },
   heroRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 18 },

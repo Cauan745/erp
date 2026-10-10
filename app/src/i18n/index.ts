@@ -7,7 +7,10 @@ type TranslationValue = string | ((params: TranslationParams) => string);
 
 const ptBR = {
   'header.localErpOfflineReady': 'ERP local · pronto para uso offline',
-  'header.onDevice': 'No dispositivo',
+  'header.syncing': 'Sincronizando…',
+  'header.synced': 'Sincronizado',
+  'header.pending': 'Pendente',
+  'header.syncError': 'Falha na sincronização',
   'tabs.sell': 'Vender',
   'tabs.products': 'Produtos',
   'tabs.sales': 'Vendas',
@@ -158,7 +161,10 @@ const ptBR = {
 const en = {
   ...ptBR,
   'header.localErpOfflineReady': 'LOCAL ERP · OFFLINE READY',
-  'header.onDevice': 'On device',
+  'header.syncing': 'Syncing…',
+  'header.synced': 'Synced',
+  'header.pending': 'Pending',
+  'header.syncError': 'Sync failed',
   'tabs.sell': 'Sell',
   'tabs.products': 'Products',
   'tabs.sales': 'Sales',
