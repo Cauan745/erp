@@ -2,6 +2,8 @@ export type AppErrorCode =
   | 'databaseUnavailable'
   | 'productPrice'
   | 'productNameRequired'
+  | 'productNameDuplicate'
+  | 'productBarcodeDuplicate'
   | 'productStockInteger'
   | 'stockChangeInteger'
   | 'stockAdjustmentMissing'

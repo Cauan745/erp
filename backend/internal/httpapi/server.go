@@ -98,6 +98,10 @@ func (s *Server) createProduct(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "barcode_taken", "barcode is already in use", nil)
 			return
 		}
+		if strings.Contains(err.Error(), "product name already exists") {
+			writeError(w, http.StatusConflict, "product_name_taken", "product name is already in use", nil)
+			return
+		}
 		writeInternalError(w, err)
 		return
 	}

@@ -13,6 +13,9 @@ CREATE UNIQUE INDEX products_barcode_unique
   ON products (barcode)
   WHERE barcode IS NOT NULL AND barcode <> '';
 
+CREATE UNIQUE INDEX products_name_unique
+  ON products (lower(name));
+
 CREATE INDEX products_created_at_idx ON products (created_at DESC);
 
 CREATE TABLE sales (

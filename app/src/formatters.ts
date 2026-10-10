@@ -33,6 +33,8 @@ const errorKeys: Record<AppErrorCode, TranslationKey> = {
   databaseUnavailable: 'errors.databaseUnavailable',
   productPrice: 'errors.productPrice',
   productNameRequired: 'errors.productNameRequired',
+  productNameDuplicate: 'errors.productNameDuplicate',
+  productBarcodeDuplicate: 'errors.productBarcodeDuplicate',
   productStockInteger: 'errors.productStockInteger',
   stockChangeInteger: 'errors.stockChangeInteger',
   stockAdjustmentMissing: 'errors.stockAdjustmentMissing',

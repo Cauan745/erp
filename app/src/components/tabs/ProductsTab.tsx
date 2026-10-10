@@ -1,4 +1,4 @@
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { colors } from '../../constants';
 import { STOCK_REASON_AUTO_SALE_REPLENISHMENT } from '../../db';
@@ -7,19 +7,15 @@ import { StockHistoryEntry } from '../../db/stock/types';
 import { shortDate } from '../../formatters';
 import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
-import { ProductForm, SetProductForm } from '../../types';
-import { Field } from '../common/Field';
+import { EmptyState } from '../common/EmptyState';
 import { ProductRow } from '../common/ProductRow';
 
 type ProductsTabProps = {
   products: Product[];
-  form: ProductForm;
-  setForm: SetProductForm;
-  onSave: () => void;
-  editingProductId: string | null;
+  search: string;
+  onSearchChange: (value: string) => void;
+  onAddProduct: () => void;
   onEditProduct: (product: Product) => void;
-  onCancelEdit: () => void;
-  onScan: () => void;
   onOpenStockAdjustment: (productId: string) => void;
   onEditStockReason: (entry: StockHistoryEntry) => void;
   stockHistory: StockHistoryEntry[];
@@ -27,13 +23,10 @@ type ProductsTabProps = {
 
 export function ProductsTab({
   products,
-  form,
-  setForm,
-  onSave,
-  editingProductId,
+  search,
+  onSearchChange,
+  onAddProduct,
   onEditProduct,
-  onCancelEdit,
-  onScan,
   onOpenStockAdjustment,
   onEditStockReason,
   stockHistory
@@ -49,69 +42,35 @@ export function ProductsTab({
   };
 
   return (
-    <KeyboardAvoidingView style={styles.content} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={styles.content}>
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <Text style={styles.sectionKicker}>{t('products.catalog')}</Text>
-        <Text style={styles.sectionTitle}>{editingProductId ? t('products.editingProduct') : t('products.addProduct')}</Text>
+        <View style={styles.heroRow}>
+          <View>
+            <Text style={styles.sectionKicker}>{t('products.catalog')}</Text>
+            <Text style={styles.sectionTitle}>{t('products.catalogue')}</Text>
+          </View>
+          <Pressable style={styles.addProductButton} onPress={onAddProduct}>
+            <Text style={styles.addProductButtonText}>{t('common.add')}</Text>
+          </Pressable>
+        </View>
         <Text style={styles.muted}>{t('products.localCatalogDescription')}</Text>
 
-        <Field
-          label={t('products.productName')}
-          value={form.name}
-          placeholder={t('products.productNamePlaceholder')}
-          onChangeText={(name) => setForm((current) => ({ ...current, name }))}
-        />
-        <Field
-          label={t('products.price')}
-          value={form.price}
-          placeholder={t('products.pricePlaceholder')}
-          keyboardType="decimal-pad"
-          onChangeText={(price) => setForm((current) => ({ ...current, price }))}
-        />
-        {editingProductId ? (
-          <Text style={styles.stockUpdateCurrent}>{t('products.currentStock', { count: form.stock })}</Text>
-        ) : (
-          <Field
-            label={t('products.stock')}
-            value={form.stock}
-            placeholder={t('products.stockPlaceholder')}
-            keyboardType="numbers-and-punctuation"
-            onChangeText={(stock) => setForm((current) => ({ ...current, stock }))}
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>⌕</Text>
+          <TextInput
+            value={search}
+            onChangeText={onSearchChange}
+            placeholder={t('products.searchPlaceholder')}
+            placeholderTextColor={colors.muted}
+            style={styles.searchInput}
           />
-        )}
-
-        <View style={styles.fieldLabelRow}>
-          <Text style={styles.fieldLabel}>{t('products.barcode')} <Text style={styles.optional}>({t('common.optional')})</Text></Text>
-          <Pressable onPress={onScan}><Text style={styles.linkText}>{t('products.scanBarcode')}</Text></Pressable>
         </View>
-        <TextInput
-          value={form.barcode}
-          placeholder={t('products.barcodePlaceholder')}
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          onChangeText={(barcode) => setForm((current) => ({ ...current, barcode }))}
-        />
-
-        <Field
-          label={t('products.category')}
-          value={form.category}
-          placeholder={t('products.categoryPlaceholder')}
-          onChangeText={(category) => setForm((current) => ({ ...current, category }))}
-        />
-        <Pressable style={styles.primaryButton} onPress={onSave}>
-          <Text style={styles.primaryButtonText}>{editingProductId ? t('products.saveChanges') : t('products.saveLocally')}</Text>
-        </Pressable>
-        {editingProductId ? (
-          <Pressable style={styles.secondaryButton} onPress={onCancelEdit}>
-            <Text style={styles.secondaryButtonText}>{t('products.cancelEdit')}</Text>
-          </Pressable>
-        ) : null}
 
         <View style={styles.listHeader}>
           <Text style={styles.listTitle}>{t('products.catalogue')}</Text>
           <Text style={styles.muted}>{t('common.productCount', { count: products.length })}</Text>
         </View>
-        {products.map((product) => (
+        {products.length ? products.map((product) => (
           <ProductRow
             key={product.id}
             product={product}
@@ -119,7 +78,7 @@ export function ProductsTab({
             onEdit={() => onEditProduct(product)}
             onStockUpdate={() => onOpenStockAdjustment(product.id)}
           />
-        ))}
+        )) : <EmptyState text={search.trim() ? t('products.noProductsMatch') : t('products.noProducts')} />}
 
         <View style={styles.historySection}>
           <View style={styles.listHeader}>
@@ -148,6 +107,6 @@ export function ProductsTab({
           )) : <Text style={styles.muted}>{t('products.noStockChanges')}</Text>}
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }

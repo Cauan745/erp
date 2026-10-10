@@ -561,6 +561,9 @@ func productDatabaseRejection(err error) *operationRejection {
 			if pgErr.ConstraintName == "products_barcode_unique" {
 				return &operationRejection{Code: "barcode_taken", Message: "barcode is already in use"}
 			}
+			if pgErr.ConstraintName == "products_name_unique" {
+				return &operationRejection{Code: "product_name_taken", Message: "product name is already in use"}
+			}
 			return &operationRejection{Code: "conflict", Message: "the operation conflicts with existing data"}
 		}
 		if pgErr.Code == "23503" {

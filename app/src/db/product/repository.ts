@@ -39,6 +39,34 @@ const productFromRow = (row: ProductRow): Product => ({
   updatedAt: row.updated_at
 });
 
+function uniqueConstraintError(error: unknown, indexName: string, columnName: string): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes(indexName) || message.includes(`products.${columnName}`);
+}
+
+async function assertProductUnique(
+  transaction: Awaited<ReturnType<typeof getDatabase>>,
+  name: string,
+  barcode: string | null,
+  productId?: string
+) {
+  const duplicateName = await transaction.getFirstAsync<{ id: string }>(`
+    SELECT id FROM products
+    WHERE name = ? COLLATE NOCASE AND (? IS NULL OR id <> ?)
+    LIMIT 1;
+  `, name, productId ?? null, productId ?? null);
+  if (duplicateName) throw new AppError('productNameDuplicate');
+
+  if (barcode) {
+    const duplicateBarcode = await transaction.getFirstAsync<{ id: string }>(`
+      SELECT id FROM products
+      WHERE barcode = ? AND (? IS NULL OR id <> ?)
+      LIMIT 1;
+    `, barcode, productId ?? null, productId ?? null);
+    if (duplicateBarcode) throw new AppError('productBarcodeDuplicate');
+  }
+}
+
 export async function listProducts(): Promise<Product[]> {
   const database = await getDatabase();
   const rows = await database.getAllAsync<ProductRow>(`
@@ -83,40 +111,51 @@ export async function createProduct(input: CreateProductInput): Promise<Product>
   };
 
   const database = await getDatabase();
-  await runInTransaction(database, async (transaction) => {
-    await transaction.runAsync(
-      `INSERT INTO products
-        (id, name, barcode, category, price_cents, stock, version, updated_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-      product.id,
-      product.name,
-      barcode,
-      product.category,
-      priceCents,
-      product.stock,
-      product.version,
-      product.updatedAt,
-      product.createdAt
-    );
-    await enqueueOperation(transaction, {
-      operationType: SYNC_OPERATION_TYPES.productCreate,
-      aggregateId: product.id,
-      payload: {
-        product: {
-          id: product.id,
-          name: product.name,
-          barcode,
-          category: product.category,
-          priceCents,
-          stock: product.stock,
-          version: product.version,
-          createdAt: product.createdAt,
-          updatedAt: product.updatedAt
-        }
-      },
-      createdAt
+  try {
+    await runInTransaction(database, async (transaction) => {
+      await assertProductUnique(transaction, name, barcode);
+      await transaction.runAsync(
+        `INSERT INTO products
+          (id, name, barcode, category, price_cents, stock, version, updated_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        product.id,
+        product.name,
+        barcode,
+        product.category,
+        priceCents,
+        product.stock,
+        product.version,
+        product.updatedAt,
+        product.createdAt
+      );
+      await enqueueOperation(transaction, {
+        operationType: SYNC_OPERATION_TYPES.productCreate,
+        aggregateId: product.id,
+        payload: {
+          product: {
+            id: product.id,
+            name: product.name,
+            barcode,
+            category: product.category,
+            priceCents,
+            stock: product.stock,
+            version: product.version,
+            createdAt: product.createdAt,
+            updatedAt: product.updatedAt
+          }
+        },
+        createdAt
+      });
     });
-  });
+  } catch (error) {
+    if (uniqueConstraintError(error, 'products_name_unique', 'name')) {
+      throw new AppError('productNameDuplicate');
+    }
+    if (uniqueConstraintError(error, 'products_barcode_unique', 'barcode')) {
+      throw new AppError('productBarcodeDuplicate');
+    }
+    throw error;
+  }
 
   return product;
 }
@@ -144,69 +183,80 @@ export async function updateProduct(productId: string, input: UpdateProductInput
   if (!name) throw new AppError('productNameRequired');
 
   const database = await getDatabase();
-  return runInTransaction(database, async (transaction) => {
-    const current = await transaction.getFirstAsync<ProductRow>(`
-      SELECT id, name, barcode, category, price_cents, stock, version, deleted_at, updated_at, created_at
-      FROM products WHERE id = ? AND deleted_at IS NULL LIMIT 1;
-    `, productId);
-    if (!current) throw new AppError('productMissing');
+  try {
+    return await runInTransaction(database, async (transaction) => {
+      const current = await transaction.getFirstAsync<ProductRow>(`
+        SELECT id, name, barcode, category, price_cents, stock, version, deleted_at, updated_at, created_at
+        FROM products WHERE id = ? AND deleted_at IS NULL LIMIT 1;
+      `, productId);
+      if (!current) throw new AppError('productMissing');
+      await assertProductUnique(transaction, name, barcode, productId);
 
-    const updatedAt = new Date().toISOString();
-    const nextVersion = current.version + 1;
-    await transaction.runAsync(
-      `UPDATE products
-       SET name = ?, barcode = ?, category = ?, price_cents = ?, version = ?, updated_at = ?
-       WHERE id = ? AND version = ?;`,
-      name,
-      barcode,
-      category,
-      priceCents,
-      nextVersion,
-      updatedAt,
-      productId,
-      current.version
-    );
+      const updatedAt = new Date().toISOString();
+      const nextVersion = current.version + 1;
+      await transaction.runAsync(
+        `UPDATE products
+         SET name = ?, barcode = ?, category = ?, price_cents = ?, version = ?, updated_at = ?
+         WHERE id = ? AND version = ?;`,
+        name,
+        barcode,
+        category,
+        priceCents,
+        nextVersion,
+        updatedAt,
+        productId,
+        current.version
+      );
 
-    const product: Product = {
-      id: productId,
-      name,
-      barcode: barcode ?? '',
-      category,
-      price: priceCents / 100,
-      stock: current.stock,
-      version: nextVersion,
-      createdAt: current.created_at,
-      updatedAt
-    };
-    const dependency = await transaction.getFirstAsync<{ operation_id: string }>(`
-      SELECT operation_id
-      FROM sync_outbox
-      WHERE aggregate_id = ? AND operation_type IN (?, ?)
-      ORDER BY created_at DESC
-      LIMIT 1;
-    `, productId, SYNC_OPERATION_TYPES.productCreate, SYNC_OPERATION_TYPES.productUpdate);
-    await enqueueOperation(transaction, {
-      operationType: SYNC_OPERATION_TYPES.productUpdate,
-      aggregateId: productId,
-      dependsOnOperationId: dependency?.operation_id ?? null,
-      payload: {
-        product: {
-          id: product.id,
-          name: product.name,
-          barcode,
-          category: product.category,
-          priceCents,
-          stock: product.stock,
-          version: product.version,
-          createdAt: product.createdAt,
-          updatedAt: product.updatedAt
+      const product: Product = {
+        id: productId,
+        name,
+        barcode: barcode ?? '',
+        category,
+        price: priceCents / 100,
+        stock: current.stock,
+        version: nextVersion,
+        createdAt: current.created_at,
+        updatedAt
+      };
+      const dependency = await transaction.getFirstAsync<{ operation_id: string }>(`
+        SELECT operation_id
+        FROM sync_outbox
+        WHERE aggregate_id = ? AND operation_type IN (?, ?)
+        ORDER BY created_at DESC
+        LIMIT 1;
+      `, productId, SYNC_OPERATION_TYPES.productCreate, SYNC_OPERATION_TYPES.productUpdate);
+      await enqueueOperation(transaction, {
+        operationType: SYNC_OPERATION_TYPES.productUpdate,
+        aggregateId: productId,
+        dependsOnOperationId: dependency?.operation_id ?? null,
+        payload: {
+          product: {
+            id: product.id,
+            name: product.name,
+            barcode,
+            category: product.category,
+            priceCents,
+            stock: product.stock,
+            version: product.version,
+            createdAt: product.createdAt,
+            updatedAt: product.updatedAt
+          },
+          expectedVersion: current.version
         },
-        expectedVersion: current.version
-      },
-      createdAt: updatedAt
+        createdAt: updatedAt
+      });
+      return product;
     });
-    return product;
-  });
+  } catch (error) {
+    if (uniqueConstraintError(error, 'products_name_unique', 'name')) {
+      throw new AppError('productNameDuplicate');
+    }
+    if (uniqueConstraintError(error, 'products_barcode_unique', 'barcode')) {
+      throw new AppError('productBarcodeDuplicate');
+    }
+    throw error;
+  }
 }
 
 export async function deleteProduct(productId: string): Promise<void> {

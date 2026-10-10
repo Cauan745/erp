@@ -10,6 +10,7 @@ import { CheckoutModal } from '../components/modals/CheckoutModal';
 import { ScannerModal } from '../components/modals/ScannerModal';
 import { StockUpdateModal } from '../components/modals/StockUpdateModal';
 import { StockReasonModal } from '../components/modals/StockReasonModal';
+import { ProductFormModal } from '../components/modals/ProductFormModal';
 import { TabBar } from '../components/navigation/TabBar';
 import { ProductsTab } from '../components/tabs/ProductsTab';
 import { SalesTab } from '../components/tabs/SalesTab';
@@ -59,14 +60,11 @@ export function AppContent() {
         )}
         {app.tab === 'products' && (
           <ProductsTab
-            products={app.products}
-            form={app.productForm}
-            setForm={app.setProductForm}
-            onSave={app.saveProduct}
-            editingProductId={app.editingProductId}
+            products={app.filteredCatalogProducts}
+            search={app.productSearch}
+            onSearchChange={app.setProductSearch}
+            onAddProduct={app.openNewProduct}
             onEditProduct={app.editProduct}
-            onCancelEdit={app.cancelProductEdit}
-            onScan={() => app.openScanner('product')}
             onOpenStockAdjustment={app.openStockAdjustment}
             onEditStockReason={app.openStockReasonEdit}
             stockHistory={app.stockHistory}
@@ -113,6 +111,15 @@ export function AppContent() {
         reason={app.stockReasonEditEntry?.reason ?? null}
         onClose={app.closeStockReasonEdit}
         onSubmit={app.saveStockReason}
+      />
+      <ProductFormModal
+        visible={app.productFormOpen}
+        form={app.productForm}
+        setForm={app.setProductForm}
+        editing={Boolean(app.editingProductId)}
+        onClose={app.closeProductForm}
+        onSave={app.saveProduct}
+        onScan={() => app.openScanner('product')}
       />
     </SafeAreaView>
   );

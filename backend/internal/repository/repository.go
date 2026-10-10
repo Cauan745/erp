@@ -321,7 +321,12 @@ func (s *Store) Checkout(ctx context.Context, input CheckoutInput) (model.Sale, 
 func mapDatabaseError(operation string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-		return fmt.Errorf("barcode already exists: %w", err)
+		switch pgErr.ConstraintName {
+		case "products_barcode_unique":
+			return fmt.Errorf("barcode already exists: %w", err)
+		case "products_name_unique":
+			return fmt.Errorf("product name already exists: %w", err)
+		}
 	}
 	return fmt.Errorf("%s: %w", operation, err)
 }

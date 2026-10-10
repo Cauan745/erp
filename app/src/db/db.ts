@@ -23,7 +23,7 @@ import {
 } from './sync/schema';
 
 const DATABASE_NAME = 'stockroom';
-const DATABASE_VERSION = 7;
+const DATABASE_VERSION = 8;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | undefined;
 

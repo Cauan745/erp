@@ -38,6 +38,7 @@ export function useAppState() {
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
   const [cart, setCart] = useState<Cart>({});
   const [search, setSearch] = useState('');
+  const [productSearch, setProductSearch] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerPurpose, setScannerPurpose] = useState<'sell' | 'product'>('sell');
   const [cartOpen, setCartOpen] = useState(false);
@@ -47,6 +48,7 @@ export function useAppState() {
   const [startupError, setStartupError] = useState<string | null>(null);
   const [productForm, setProductForm] = useState<ProductForm>(emptyProductForm);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [productFormOpen, setProductFormOpen] = useState(false);
   const [stockAdjustmentProductId, setStockAdjustmentProductId] = useState<string | null>(null);
   const [stockReasonEditEntry, setStockReasonEditEntry] = useState<StockHistoryEntry | null>(null);
 
@@ -84,6 +86,13 @@ export function useAppState() {
       `${product.name} ${product.barcode} ${product.category}`.toLowerCase().includes(term)
     );
   }, [products, search]);
+  const filteredCatalogProducts = useMemo(() => {
+    const term = productSearch.trim().toLowerCase();
+    if (!term) return products;
+    return products.filter((product) =>
+      `${product.name} ${product.barcode} ${product.category}`.toLowerCase().includes(term)
+    );
+  }, [products, productSearch]);
   const stockAdjustmentProduct = useMemo(
     () => products.find((product) => product.id === stockAdjustmentProductId) ?? null,
     [products, stockAdjustmentProductId]
@@ -274,10 +283,23 @@ export function useAppState() {
         text: t('alerts.addProduct'),
         onPress: () => {
           setTab('products');
-          setProductForm((current) => ({ ...current, barcode }));
+          setProductForm({ ...emptyProductForm, barcode });
+          setProductFormOpen(true);
         }
       }
     ]);
+  };
+
+  const openNewProduct = () => {
+    setEditingProductId(null);
+    setProductForm(emptyProductForm);
+    setProductFormOpen(true);
+  };
+
+  const closeProductForm = () => {
+    setProductFormOpen(false);
+    setEditingProductId(null);
+    setProductForm(emptyProductForm);
   };
 
   const saveProduct = async () => {
@@ -290,22 +312,22 @@ export function useAppState() {
     }
 
     try {
+      const wasEditing = Boolean(editingProductId);
       const input = {
         name,
         price,
         stock,
         barcode: productForm.barcode.trim(),
-        category: productForm.category.trim() || t('products.categoryPlaceholder')
+        category: productForm.category.trim() || 'General'
       };
       if (editingProductId) {
         await updateProduct(editingProductId, input);
       } else {
         await createProduct(input);
       }
-      setEditingProductId(null);
-      setProductForm(emptyProductForm);
+      closeProductForm();
       await refresh();
-      showNotice(t(editingProductId ? 'alerts.productUpdated' : 'alerts.productSaved'));
+      showNotice(t(wasEditing ? 'alerts.productUpdated' : 'alerts.productSaved'));
     } catch (error) {
       Alert.alert(t('alerts.saveProductFailedTitle'), errorMessage(error, t));
     }
@@ -321,11 +343,11 @@ export function useAppState() {
       category: product.category
     });
     setTab('products');
+    setProductFormOpen(true);
   };
 
   const cancelProductEdit = () => {
-    setEditingProductId(null);
-    setProductForm(emptyProductForm);
+    closeProductForm();
   };
 
   const saveStockAdjustment = async (quantityInput: string, reason: string) => {
@@ -442,10 +464,14 @@ export function useAppState() {
     stockHistory,
     productForm,
     editingProductId,
+    productFormOpen,
     setProductForm: setProductForm as SetProductForm,
     filteredProducts,
+    filteredCatalogProducts,
     search,
     setSearch,
+    productSearch,
+    setProductSearch,
     cartLines,
     cartTotal,
     cartQuantity,
@@ -472,6 +498,8 @@ export function useAppState() {
     updateQuantity,
     onBarcode,
     saveProduct,
+    openNewProduct,
+    closeProductForm,
     editProduct,
     cancelProductEdit,
     completeCheckout,

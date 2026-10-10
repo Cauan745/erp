@@ -41,6 +41,9 @@ export const CREATE_PRODUCT_INDEXES = `
     ON products(barcode)
     WHERE barcode IS NOT NULL AND barcode <> '';
 
+  CREATE UNIQUE INDEX IF NOT EXISTS products_name_unique
+    ON products(name COLLATE NOCASE);
+
   CREATE INDEX IF NOT EXISTS products_created_at_idx
     ON products(created_at DESC);
 `;
