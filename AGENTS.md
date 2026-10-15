@@ -129,6 +129,8 @@ make backend-test
 
 Run `make app-typecheck` after TypeScript changes. Run `make backend-test` after Go changes. The mobile app currently has no automated test script.
 
+When making UI changes, run the relevant checks and then pause so the user can test and verify the behavior before creating a commit, posting an issue update, or closing an issue.
+
 The GitHub CLI (`gh`) is available for repository operations, including listing and inspecting GitHub issues. Use the configured repository remote when checking live issue status.
 
 ## GitHub issue workflow
