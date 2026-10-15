@@ -129,6 +129,23 @@ make backend-test
 
 Run `make app-typecheck` after TypeScript changes. Run `make backend-test` after Go changes. The mobile app currently has no automated test script.
 
+The GitHub CLI (`gh`) is available for repository operations, including listing and inspecting GitHub issues. Use the configured repository remote when checking live issue status.
+
+## GitHub issue workflow
+
+When fixing a GitHub issue, follow this order:
+
+1. Read the issue details and confirm the requested behavior.
+2. Implement the fix and run the relevant project checks.
+3. Create the commit that contains the fix, or identify the branch or pull request that contains it.
+4. Before closing the issue, add a comment that includes:
+   - A link to the solving commit, branch, or pull request.
+   - A short summary of how the issue was fixed.
+   - A short description of what the program does after the fix.
+5. Close the issue only after the comment and link are visible on the issue thread.
+
+Do not close an issue with only a status update. If the issue was closed before the implementation link was added, add a follow-up comment with the link and the same summary instead of leaving the issue without a code reference.
+
 The PostgreSQL integration tests run only when `TEST_DATABASE_URL` is set. They cover idempotent checkout processing and require a migrated PostgreSQL database. If Docker or PostgreSQL is unavailable, report that integration coverage was skipped instead of treating unit or HTTP tests as full database validation.
 
 ## Code conventions
