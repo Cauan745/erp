@@ -148,6 +148,8 @@ When fixing a GitHub issue, follow this order:
 
 Do not close an issue with only a status update. If the issue was closed before the implementation link was added, add a follow-up comment with the link and the same summary instead of leaving the issue without a code reference.
 
+When posting multi-paragraph GitHub comments with `gh`, pass actual newline characters. Do not pass literal `\\n` or `\\n\\n` sequences, because GitHub will display them as text. Preserve the line breaks through shell quoting or use a body file, then verify the rendered comment.
+
 The PostgreSQL integration tests run only when `TEST_DATABASE_URL` is set. They cover idempotent checkout processing and require a migrated PostgreSQL database. If Docker or PostgreSQL is unavailable, report that integration coverage was skipped instead of treating unit or HTTP tests as full database validation.
 
 ## Code conventions
