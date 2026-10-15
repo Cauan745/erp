@@ -5,6 +5,7 @@ import {
   addProductStock,
   checkout,
   createProduct,
+  deleteProduct,
   findProductByBarcode,
   InsufficientStockError,
   listProducts,
@@ -357,6 +358,31 @@ export function useAppState() {
     setProductFormOpen(true);
   };
 
+  const removeProduct = (product: Product) => {
+    Alert.alert(
+      t('products.deleteProduct'),
+      t('products.deleteProductMessage', { productName: product.name }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                await deleteProduct(product.id);
+                await refresh();
+                showNotice(t('alerts.productDeleted'));
+              } catch (error) {
+                showNotice(`${t('alerts.deleteProductFailedTitle')}: ${errorMessage(error, t)}`);
+              }
+            })();
+          }
+        }
+      ]
+    );
+  };
+
   const cancelProductEdit = () => {
     closeProductForm();
   };
@@ -513,6 +539,7 @@ export function useAppState() {
     openNewProduct,
     closeProductForm,
     editProduct,
+    deleteProduct: removeProduct,
     cancelProductEdit,
     completeCheckout,
     saveStockAdjustment,

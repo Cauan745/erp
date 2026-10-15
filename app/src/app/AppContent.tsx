@@ -65,6 +65,7 @@ export function AppContent() {
             onSearchChange={app.setProductSearch}
             onAddProduct={app.openNewProduct}
             onEditProduct={app.editProduct}
+            onDeleteProduct={app.deleteProduct}
             onOpenStockAdjustment={app.openStockAdjustment}
             onEditStockReason={app.openStockReasonEdit}
             stockHistory={app.stockHistory}

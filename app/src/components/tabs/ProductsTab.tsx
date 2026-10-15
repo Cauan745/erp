@@ -8,6 +8,7 @@ import { shortDate } from '../../formatters';
 import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
 import { EmptyState } from '../common/EmptyState';
+import { ActionIcon } from '../common/ActionIcon';
 import { ProductRow } from '../common/ProductRow';
 
 type ProductsTabProps = {
@@ -16,6 +17,7 @@ type ProductsTabProps = {
   onSearchChange: (value: string) => void;
   onAddProduct: () => void;
   onEditProduct: (product: Product) => void;
+  onDeleteProduct: (product: Product) => void;
   onOpenStockAdjustment: (productId: string) => void;
   onEditStockReason: (entry: StockHistoryEntry) => void;
   stockHistory: StockHistoryEntry[];
@@ -27,6 +29,7 @@ export function ProductsTab({
   onSearchChange,
   onAddProduct,
   onEditProduct,
+  onDeleteProduct,
   onOpenStockAdjustment,
   onEditStockReason,
   stockHistory
@@ -49,8 +52,13 @@ export function ProductsTab({
             <Text style={styles.sectionKicker}>{t('products.catalog')}</Text>
             <Text style={styles.sectionTitle}>{t('products.catalogue')}</Text>
           </View>
-          <Pressable style={styles.addProductButton} onPress={onAddProduct}>
-            <Text style={styles.addProductButtonText}>{t('common.add')}</Text>
+          <Pressable
+            accessibilityLabel={t('common.add')}
+            accessibilityRole="button"
+            style={styles.addProductButton}
+            onPress={onAddProduct}
+          >
+            <Text style={styles.addProductButtonText}>＋</Text>
           </Pressable>
         </View>
         <Text style={styles.muted}>{t('products.localCatalogDescription')}</Text>
@@ -77,6 +85,7 @@ export function ProductsTab({
             compact
             onEdit={() => onEditProduct(product)}
             onStockUpdate={() => onOpenStockAdjustment(product.id)}
+            onDelete={() => onDeleteProduct(product)}
           />
         )) : <EmptyState text={search.trim() ? t('products.noProductsMatch') : t('products.noProducts')} />}
 
@@ -98,9 +107,7 @@ export function ProductsTab({
                   {entry.quantity > 0 ? '+' : ''}{entry.quantity}
                 </Text>
                 {entry.source === 'adjustment' ? (
-                  <Pressable onPress={() => onEditStockReason(entry)} hitSlop={8}>
-                    <Text style={styles.addHint}>{t('products.editReason')}</Text>
-                  </Pressable>
+                  <ActionIcon icon="✎" label={t('products.editReason')} onPress={() => onEditStockReason(entry)} />
                 ) : null}
               </View>
             </View>
