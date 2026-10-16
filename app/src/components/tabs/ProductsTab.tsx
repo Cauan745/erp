@@ -1,4 +1,5 @@
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
 import { colors } from '../../constants';
 import { STOCK_REASON_AUTO_SALE_REPLENISHMENT } from '../../db';
@@ -46,7 +47,12 @@ export function ProductsTab({
 
   return (
     <View style={styles.content}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="none"
+        bottomOffset={16}
+      >
         <View style={styles.heroRow}>
           <View>
             <Text style={styles.sectionKicker}>{t('products.catalog')}</Text>
@@ -113,7 +119,7 @@ export function ProductsTab({
             </View>
           )) : <Text style={styles.muted}>{t('products.noStockChanges')}</Text>}
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

@@ -1,6 +1,7 @@
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { colors } from '../../constants';
 import { useI18n } from '../../i18n';
@@ -45,7 +46,10 @@ export function ProductFormModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.productModalKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={styles.productModalKeyboard}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <View style={styles.modalBackdrop}>
           <View style={[styles.productModalCard, { marginBottom: 20 + insets.bottom }]}>
             <View style={styles.sheetHeader}>
@@ -58,7 +62,12 @@ export function ProductFormModal({
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={styles.productModalContent} keyboardShouldPersistTaps="handled">
+            <KeyboardAwareScrollView
+              contentContainerStyle={styles.productModalContent}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="none"
+              bottomOffset={16}
+            >
               <Field
                 label={t('products.productName')}
                 value={form.name}
@@ -155,7 +164,7 @@ export function ProductFormModal({
               <Pressable style={styles.secondaryButton} onPress={onClose}>
                 <Text style={styles.secondaryButtonText}>{t('common.cancel')}</Text>
               </Pressable>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </View>
         </View>
       </KeyboardAvoidingView>

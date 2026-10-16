@@ -110,6 +110,8 @@ export const styles = StyleSheet.create({
   toastText: { color: colors.background, fontSize: 13, fontWeight: '800' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.62)', justifyContent: 'flex-end' },
   productModalKeyboard: { flex: 1 },
+  modalKeyboardScroll: { flex: 1 },
+  modalKeyboardContent: { flexGrow: 1, justifyContent: 'flex-end' },
   productModalCard: { backgroundColor: colors.background, borderRadius: 24, marginHorizontal: 14, padding: 20, maxHeight: '90%' },
   productModalContent: { paddingBottom: 4 },
   cartSheet: { backgroundColor: colors.background, borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 20, paddingBottom: 30, maxHeight: '80%' },

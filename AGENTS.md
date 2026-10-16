@@ -112,6 +112,7 @@ Do not reintroduce RxDB or its storage plugin unless the user explicitly asks fo
 - The foreground worker attempts sync at app startup, when the app returns to the foreground, and every 60 seconds while active. The background task uses a 15-minute minimum interval, but the operating system decides whether it runs.
 - `npm --prefix app run android` runs `expo run:android --device`, which targets a connected physical device or lets Expo select a device.
 - `make run` calls the app's Android command through `app/Makefile`.
+- Gradle/Android builds have repeatedly frozen or crashed the host PC in this environment, even though Hyprland remained responsive. Do not run `./gradlew`, `expo run:android`, or `make run` automatically. Ask for explicit user confirmation immediately before running a native Android build, and prefer `make app-typecheck` and Expo config validation when those checks are sufficient.
 - Use USB debugging or an Android device connected through ADB when running on a phone.
 - `npm --prefix app run start` starts the Expo development server without building or installing the native app.
 - Use `react-native-safe-area-context` for system bar insets. Do not replace it with the core React Native `SafeAreaView` without checking Android behavior.

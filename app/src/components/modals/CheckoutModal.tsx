@@ -1,6 +1,7 @@
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { money, parseMoneyToCents } from '../../formatters';
 import { useI18n } from '../../i18n';
@@ -41,8 +42,18 @@ export function CheckoutModal({ visible, total, onClose, onConfirm }: CheckoutMo
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={[styles.checkoutCard, { marginBottom: 20 + insets.bottom }]}>
+      <KeyboardAvoidingView
+        style={styles.productModalKeyboard}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.modalBackdrop}>
+          <KeyboardAwareScrollView
+            style={styles.modalKeyboardScroll}
+            contentContainerStyle={styles.modalKeyboardContent}
+            keyboardShouldPersistTaps="handled"
+            bottomOffset={16}
+          >
+            <View style={[styles.checkoutCard, { marginBottom: 20 + insets.bottom }]}>
           <Text style={styles.eyebrow}>{t('checkout.payment')}</Text>
           <Text style={styles.modalTitle}>{t('checkout.title')}</Text>
           <Text style={styles.muted}>{t('checkout.description')}</Text>
@@ -94,8 +105,10 @@ export function CheckoutModal({ visible, total, onClose, onConfirm }: CheckoutMo
           <Pressable style={styles.secondaryButton} onPress={onClose}>
             <Text style={styles.secondaryButtonText}>{t('checkout.backToCart')}</Text>
           </Pressable>
+            </View>
+          </KeyboardAwareScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

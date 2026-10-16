@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { colors } from '../../constants';
 import { Product } from '../../db/product/types';
@@ -29,8 +30,18 @@ export function StockUpdateModal({ visible, product, onClose, onSubmit }: StockU
 
   return (
     <Modal visible={visible && Boolean(product)} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={[styles.checkoutCard, { marginBottom: 20 + insets.bottom }]}>
+      <KeyboardAvoidingView
+        style={styles.productModalKeyboard}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.modalBackdrop}>
+          <KeyboardAwareScrollView
+            style={styles.modalKeyboardScroll}
+            contentContainerStyle={styles.modalKeyboardContent}
+            keyboardShouldPersistTaps="handled"
+            bottomOffset={16}
+          >
+            <View style={[styles.checkoutCard, { marginBottom: 20 + insets.bottom }]}>
           <Text style={styles.eyebrow}>{t('stock.inventory')}</Text>
           <Text style={styles.modalTitle}>{t('stock.adjust')}</Text>
           <Text style={styles.muted}>{product?.name}</Text>
@@ -66,8 +77,10 @@ export function StockUpdateModal({ visible, product, onClose, onSubmit }: StockU
           <Pressable style={styles.secondaryButton} onPress={onClose}>
             <Text style={styles.secondaryButtonText}>{t('common.cancel')}</Text>
           </Pressable>
+            </View>
+          </KeyboardAwareScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

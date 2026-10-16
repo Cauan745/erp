@@ -1,4 +1,5 @@
 import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { colors } from '../../constants';
 import { money } from '../../formatters';
@@ -32,7 +33,7 @@ export function SellTab({
   const { locale, t } = useI18n();
 
   return (
-    <View style={styles.content}>
+    <KeyboardAvoidingView style={styles.content} behavior="height">
       <View style={styles.heroRow}>
         <View>
           <Text style={styles.sectionKicker}>{t('sell.quickSale')}</Text>
@@ -64,6 +65,8 @@ export function SellTab({
         data={products}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="none"
         renderItem={({ item }) => <ProductRow product={item} onPress={() => onAddToCart(item)} />}
         ListEmptyComponent={<EmptyState text={t('sell.noProductsMatch')} />}
       />
@@ -77,6 +80,6 @@ export function SellTab({
           <Text style={styles.cartBarAction}>{t('sell.reviewCart')}</Text>
         </Pressable>
       ) : null}
-    </View>
+    </KeyboardAvoidingView>
   );
 }

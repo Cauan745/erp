@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { colors } from '../../constants';
 import { STOCK_REASON_AUTO_SALE_REPLENISHMENT } from '../../db';
@@ -36,8 +37,18 @@ export function StockReasonModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={[styles.checkoutCard, { marginBottom: 20 + insets.bottom }]}>
+      <KeyboardAvoidingView
+        style={styles.productModalKeyboard}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.modalBackdrop}>
+          <KeyboardAwareScrollView
+            style={styles.modalKeyboardScroll}
+            contentContainerStyle={styles.modalKeyboardContent}
+            keyboardShouldPersistTaps="handled"
+            bottomOffset={16}
+          >
+            <View style={[styles.checkoutCard, { marginBottom: 20 + insets.bottom }]}>
           <Text style={styles.eyebrow}>{t('stock.inventory')}</Text>
           <Text style={styles.modalTitle}>{t('stock.editReason')}</Text>
           <Text style={styles.muted}>{productName}</Text>
@@ -59,8 +70,10 @@ export function StockReasonModal({
           <Pressable style={styles.secondaryButton} onPress={onClose}>
             <Text style={styles.secondaryButtonText}>{t('common.cancel')}</Text>
           </Pressable>
+            </View>
+          </KeyboardAwareScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
