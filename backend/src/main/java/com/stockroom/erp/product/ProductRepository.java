@@ -10,7 +10,13 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ProductRepository extends JpaRepository<Product, UUID> {
-    List<Product> findByDeletedAtIsNullOrderByCreatedAtDesc();
+    // PostgreSQL's ASCII folding and C collation match the unique name index.
+    @Query(value = """
+            select * from products where deleted_at is null
+            order by created_at desc,
+            translate(name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') collate "C", id
+            """, nativeQuery = true)
+    List<Product> findActiveOrdered();
     Optional<Product> findByBarcodeAndDeletedAtIsNull(String barcode);
 
     // All product writers must call this before reading mutable state, inside a transaction.

@@ -1,22 +1,7 @@
 import { Alert } from 'react-native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import {
-  addProductStock,
-  checkout,
-  createProduct,
-  deleteProduct,
-  findProductByBarcode,
-  InsufficientStockError,
-  listProducts,
-  listSales,
-  listStockHistory,
-  adjustStock,
-  STOCK_REASON_AUTO_SALE_REPLENISHMENT,
-  updateProduct,
-  updateStockAdjustmentReason
-} from '../db';
-import { Product } from '../db/product/types';
+import { createProduct, deleteProduct, findProductByBarcode, listProducts, updateProduct, Product } from '../repositories';
 import { PaymentMethod, Sale } from '../db/sale/types';
 import { StockHistoryEntry } from '../db/stock/types';
 import { errorMessage } from '../formatters';
@@ -34,10 +19,17 @@ const emptyProductForm: ProductForm = {
 
 export function useAppState() {
   const { t } = useI18n();
+  const scanAccepted = useRef(true);
+  const productWritePending = useRef(false);
+  const [savingProduct, setSavingProduct] = useState(false);
+  const hasLoaded = useRef(false);
+  const catalogRevision = useRef(0);
+  const refreshPending = useRef<Promise<void> | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<Tab>('sell');
   const [products, setProducts] = useState<Product[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
+  const sales: Sale[] = [];
+  const stockHistory: StockHistoryEntry[] = [];
   const [cart, setCart] = useState<Cart>({});
   const [search, setSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
@@ -54,25 +46,29 @@ export function useAppState() {
   const [stockAdjustmentProductId, setStockAdjustmentProductId] = useState<string | null>(null);
   const [stockReasonEditEntry, setStockReasonEditEntry] = useState<StockHistoryEntry | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      const [nextProducts, nextSales, nextStockHistory] = await Promise.all([
-        listProducts(),
-        listSales(),
-        listStockHistory()
-      ]);
-      setProducts(nextProducts);
-      setSales(nextSales);
-      setStockHistory(nextStockHistory);
-      setStartupError(null);
-      setLoading(false);
-    } catch (error) {
-      console.error('Local database startup failed', error);
-      setStartupError(errorMessage(error, t));
-      setLoading(false);
-      throw error;
-    }
-  }, []);
+  const refresh = useCallback(() => {
+    if (refreshPending.current) return refreshPending.current;
+    setRefreshing(true);
+    const revision = catalogRevision.current;
+    const request = (async () => {
+      try {
+        const nextProducts = await listProducts();
+        if (revision === catalogRevision.current) setProducts(nextProducts);
+        hasLoaded.current = true;
+        setStartupError(null);
+        setLoading(false);
+      } catch (error) {
+        if (!hasLoaded.current) setStartupError(errorMessage(error, t));
+        setLoading(false);
+        throw error;
+      } finally {
+        refreshPending.current = null;
+        setRefreshing(false);
+      }
+    })();
+    refreshPending.current = request;
+    return request;
+  }, [t]);
 
   useEffect(() => {
     void refresh().catch(() => undefined);
@@ -129,22 +125,9 @@ export function useAppState() {
     showNotice(t('alerts.productAdded', { productName: product.name }));
   };
 
-  const addStock = async (productId: string, quantity: number) => {
-    try {
-      await addProductStock(productId, quantity, STOCK_REASON_AUTO_SALE_REPLENISHMENT);
-      await refresh();
-      return true;
-    } catch (error) {
-      Alert.alert(t('alerts.addStockFailedTitle'), errorMessage(error, t));
-      return false;
-    }
-  };
-
-  const addStockAndProductToCart = async (product: Product, quantity: number) => {
-    if (await addStock(product.id, quantity)) {
-      addProductToCart(product);
-    }
-  };
+  const unavailable = () => Alert.alert(t('transition.title'), t('transition.writesUnavailable'));
+  const addStock = async (_productId: string, _quantity: number) => { unavailable(); return false; };
+  const addStockAndProductToCart = async (_product: Product, _quantity: number) => { unavailable(); };
 
   const addToCart = (product: Product) => {
     const existing = cart[product.id];
@@ -260,11 +243,14 @@ export function useAppState() {
   };
 
   const openScanner = (purpose: 'sell' | 'product') => {
+    scanAccepted.current = false;
     setScannerPurpose(purpose);
     setScannerOpen(true);
   };
 
   const onBarcode = async (barcode: string) => {
+    if (scanAccepted.current) return;
+    scanAccepted.current = true;
     setScannerOpen(false);
     if (scannerPurpose === 'product') {
       setProductForm((current) => ({ ...current, barcode }));
@@ -290,6 +276,7 @@ export function useAppState() {
         text: t('alerts.addProduct'),
         onPress: () => {
           setTab('products');
+          setEditingProductId(null);
           setProductForm({ ...emptyProductForm, barcode });
           setProductFormOpen(true);
         }
@@ -304,23 +291,27 @@ export function useAppState() {
   };
 
   const closeProductForm = () => {
+    if (productWritePending.current) return;
     setProductFormOpen(false);
     setEditingProductId(null);
     setProductForm(emptyProductForm);
   };
 
   const saveProduct = async () => {
+    if (productWritePending.current) return;
     const name = productForm.name.trim();
     const sellingPriceInput = productForm.sellingPrice.trim();
     const sellingPrice = Number(sellingPriceInput.replace(',', '.'));
     const costInput = productForm.cost.trim();
     const cost = costInput ? Number(costInput.replace(',', '.')) : null;
     const stock = Number(productForm.stock.trim());
-    if (!name || !sellingPriceInput || !Number.isFinite(sellingPrice) || sellingPrice < 0 || (cost !== null && (!Number.isFinite(cost) || cost < 0)) || !Number.isSafeInteger(stock)) {
+    if (!name || !sellingPriceInput || !Number.isFinite(sellingPrice) || sellingPrice < 0 || (cost !== null && (!Number.isFinite(cost) || cost < 0)) || (!editingProductId && (!Number.isInteger(stock) || stock < -2147483648 || stock > 2147483647))) {
       Alert.alert(t('alerts.checkProductDetailsTitle'), t('alerts.checkProductDetailsMessage'));
       return;
     }
 
+    productWritePending.current = true;
+    setSavingProduct(true);
     try {
       const wasEditing = Boolean(editingProductId);
       const input = {
@@ -331,16 +322,22 @@ export function useAppState() {
         barcode: productForm.barcode.trim(),
         category: productForm.category.trim() || 'General'
       };
-      if (editingProductId) {
-        await updateProduct(editingProductId, input);
-      } else {
-        await createProduct(input);
-      }
+      const saved = editingProductId
+        ? await updateProduct(editingProductId, input)
+        : await createProduct(input);
+      catalogRevision.current += 1;
+      setProducts((current) => wasEditing
+        ? current.map((product) => product.id === saved.id ? saved : product)
+        : [saved, ...current]);
+      productWritePending.current = false;
       closeProductForm();
-      await refresh();
       showNotice(t(wasEditing ? 'alerts.productUpdated' : 'alerts.productSaved'));
+      await refreshAfterWrite();
     } catch (error) {
       Alert.alert(t('alerts.saveProductFailedTitle'), errorMessage(error, t));
+    } finally {
+      productWritePending.current = false;
+      setSavingProduct(false);
     }
   };
 
@@ -358,6 +355,14 @@ export function useAppState() {
     setProductFormOpen(true);
   };
 
+  const refreshAfterWrite = async () => {
+    // Finish any read started before the write, then fetch the committed state.
+    await refreshPending.current?.catch(() => undefined);
+    try { await refresh(); } catch (error) {
+      Alert.alert(t('alerts.refreshFailedTitle'), errorMessage(error, t));
+    }
+  };
+
   const removeProduct = (product: Product) => {
     Alert.alert(
       t('products.deleteProduct'),
@@ -371,8 +376,10 @@ export function useAppState() {
             void (async () => {
               try {
                 await deleteProduct(product.id);
-                await refresh();
+                catalogRevision.current += 1;
+                setProducts((current) => current.filter((item) => item.id !== product.id));
                 showNotice(t('alerts.productDeleted'));
+                await refreshAfterWrite();
               } catch (error) {
                 showNotice(`${t('alerts.deleteProductFailedTitle')}: ${errorMessage(error, t)}`);
               }
@@ -387,105 +394,9 @@ export function useAppState() {
     closeProductForm();
   };
 
-  const saveStockAdjustment = async (quantityInput: string, reason: string) => {
-    if (!stockAdjustmentProductId) return;
-
-    const quantity = Number(quantityInput.trim());
-    if (!Number.isSafeInteger(quantity) || quantity === 0) {
-      Alert.alert(t('alerts.checkStockChangeTitle'), t('alerts.checkStockChangeMessage'));
-      return;
-    }
-
-    try {
-      await adjustStock(stockAdjustmentProductId, quantity, reason);
-      setStockAdjustmentProductId(null);
-      await refresh();
-      showNotice(t('alerts.stockUpdated'));
-    } catch (error) {
-      Alert.alert(t('alerts.updateStockFailedTitle'), errorMessage(error, t));
-    }
-  };
-
-  const saveStockReason = async (reason: string) => {
-    if (!stockReasonEditEntry || stockReasonEditEntry.source !== 'adjustment') return;
-
-    try {
-      await updateStockAdjustmentReason(stockReasonEditEntry.id, reason);
-      setStockReasonEditEntry(null);
-      await refresh();
-      showNotice(t('alerts.stockReasonUpdated'));
-    } catch (error) {
-      Alert.alert(t('alerts.updateStockReasonFailedTitle'), errorMessage(error, t));
-    }
-  };
-
-  const retryCheckoutAfterAddingStock = async (
-    shortage: InsufficientStockError['shortage'],
-    paymentMethod: PaymentMethod,
-    cashReceivedCents: number | null
-  ) => {
-    try {
-      await addProductStock(
-        shortage.productId,
-        shortage.requested - shortage.available,
-        STOCK_REASON_AUTO_SALE_REPLENISHMENT
-      );
-      await refresh();
-    } catch (error) {
-      Alert.alert(t('alerts.addStockFailedTitle'), errorMessage(error, t));
-      return;
-    }
-
-    await completeCheckout(paymentMethod, cashReceivedCents);
-  };
-
-  const completeCheckout = async (paymentMethod: PaymentMethod, cashReceivedCents: number | null, extraAllowedProductId?: string): Promise<void> => {
-    if (!cartLines.length) return;
-    try {
-      const allowInsufficientStockProductIds = cartLines
-        .filter((line) => line.allowInsufficientStock)
-        .map((line) => line.productId);
-      if (extraAllowedProductId && !allowInsufficientStockProductIds.includes(extraAllowedProductId)) {
-        allowInsufficientStockProductIds.push(extraAllowedProductId);
-      }
-      await checkout(cartLines, {
-        allowInsufficientStockProductIds,
-        paymentMethod,
-        ...(cashReceivedCents === null ? {} : { cashReceivedCents })
-      });
-      setCart({});
-      setCheckoutOpen(false);
-      setCartOpen(false);
-      try {
-        await refresh();
-      } catch (refreshError) {
-        console.error('Local refresh after checkout failed', refreshError);
-      }
-      showNotice(t('alerts.saleSaved'));
-    } catch (error) {
-      console.error('Checkout failed before local sale confirmation', error);
-      if (error instanceof InsufficientStockError) {
-        const { shortage } = error;
-        Alert.alert(
-          t('alerts.notEnoughStockTitle'),
-          t('alerts.notEnoughStockMessage', shortage),
-          [
-            { text: t('common.cancel'), style: 'cancel' },
-            {
-              text: t('alerts.addStockForSale', { quantity: shortage.requested - shortage.available }),
-              onPress: () => { void retryCheckoutAfterAddingStock(shortage, paymentMethod, cashReceivedCents); }
-            },
-            {
-              text: t('sell.sellAnyway'),
-              onPress: () => { void completeCheckout(paymentMethod, cashReceivedCents, shortage.productId); }
-            }
-          ]
-        );
-        return;
-      }
-      Alert.alert(t('alerts.completeSaleFailedTitle'), errorMessage(error, t));
-    }
-  };
+  const saveStockAdjustment = async (_quantity: string, _reason: string) => { unavailable(); };
+  const saveStockReason = async (_reason: string) => { unavailable(); };
+  const completeCheckout = async (_method: PaymentMethod, _cash: number | null): Promise<void> => { unavailable(); };
 
   const retry = () => {
     setLoading(true);
@@ -503,6 +414,7 @@ export function useAppState() {
     productForm,
     editingProductId,
     productFormOpen,
+    savingProduct,
     setProductForm: setProductForm as SetProductForm,
     filteredProducts,
     filteredCatalogProducts,
@@ -517,17 +429,17 @@ export function useAppState() {
     scannerOpen,
     cartOpen,
     checkoutOpen,
-    setScannerOpen,
+    closeScanner: () => { scanAccepted.current = true; setScannerOpen(false); },
     setCartOpen,
     setCheckoutOpen,
     stockAdjustmentProduct,
     stockAdjustmentOpen: Boolean(stockAdjustmentProductId),
-    openStockAdjustment: setStockAdjustmentProductId,
+    openStockAdjustment: (_id: string) => unavailable(),
     closeStockAdjustment: () => setStockAdjustmentProductId(null),
     stockReasonEditEntry,
     stockReasonEditOpen: Boolean(stockReasonEditEntry),
     openStockReasonEdit: (entry: StockHistoryEntry) => {
-      if (entry.source === 'adjustment') setStockReasonEditEntry(entry);
+      unavailable();
     },
     closeStockReasonEdit: () => setStockReasonEditEntry(null),
     saveStockReason,
@@ -545,6 +457,8 @@ export function useAppState() {
     saveStockAdjustment,
     loading,
     startupError,
-    retry
+    retry,
+    refreshing,
+    refresh: () => { void refresh().catch((error) => Alert.alert(t('alerts.catalogRefreshFailedTitle'), errorMessage(error, t))); }
   };
 }

@@ -1,3 +1,4 @@
+import { ApiError } from './api/client';
 import { AppError, AppErrorCode } from './errors';
 import { Locale, TranslationKey, Translator } from './i18n';
 
@@ -30,6 +31,9 @@ export const shortDate = (value: string, locale: Locale = 'pt-BR') =>
   }).format(new Date(value));
 
 const errorKeys: Record<AppErrorCode, TranslationKey> = {
+  networkUnavailable: 'errors.networkUnavailable',
+  requestTimeout: 'errors.requestTimeout',
+  apiResponseInvalid: 'errors.apiResponseInvalid',
   databaseUnavailable: 'errors.databaseUnavailable',
   productPrice: 'errors.productPrice',
   productCost: 'errors.productCost',
@@ -51,6 +55,14 @@ const errorKeys: Record<AppErrorCode, TranslationKey> = {
 };
 
 export const errorMessage = (error: unknown, t: Translator) => {
+  if (error instanceof ApiError) {
+    const keys: Record<string, TranslationKey> = {
+      product_name_taken: 'errors.productNameDuplicate', barcode_taken: 'errors.productBarcodeDuplicate',
+      product_missing: 'errors.productMissing', validation_failed: 'errors.validationFailed',
+      inventory_busy: 'errors.inventoryBusy', internal_error: 'errors.apiFailure'
+    };
+    return t(keys[error.code] ?? 'errors.apiFailure');
+  }
   if (error instanceof AppError) {
     return t(errorKeys[error.code], error.params);
   }

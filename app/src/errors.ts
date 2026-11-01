@@ -1,4 +1,7 @@
 export type AppErrorCode =
+  | 'networkUnavailable'
+  | 'requestTimeout'
+  | 'apiResponseInvalid'
   | 'databaseUnavailable'
   | 'productPrice'
   | 'productCost'

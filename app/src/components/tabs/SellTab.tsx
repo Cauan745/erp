@@ -4,7 +4,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { colors } from '../../constants';
 import { money } from '../../formatters';
 import { useI18n } from '../../i18n';
-import { Product } from '../../db/product/types';
+import { Product } from '../../repositories/product';
 import { styles } from '../../styles';
 import { EmptyState } from '../common/EmptyState';
 import { ProductRow } from '../common/ProductRow';

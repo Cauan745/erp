@@ -1,6 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
 import { Text, View } from 'react-native';
-import { useEffect } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppHeader } from '../components/AppHeader';
@@ -16,14 +15,13 @@ import { ProductsTab } from '../components/tabs/ProductsTab';
 import { SalesTab } from '../components/tabs/SalesTab';
 import { SellTab } from '../components/tabs/SellTab';
 import { styles } from '../styles';
+import { useI18n } from '../i18n';
 import { useAppState } from './useAppState';
-import { startSyncWorker } from '../sync/service';
 
 export function AppContent() {
   const insets = useSafeAreaInsets();
   const app = useAppState();
-
-  useEffect(() => startSyncWorker(), []);
+  const { t } = useI18n();
 
   if (app.loading) {
     return <StartupScreen topInset={insets.top} bottomInset={insets.bottom} />;
@@ -44,7 +42,8 @@ export function AppContent() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar style="light" />
       <View style={styles.container}>
-        <AppHeader />
+        <AppHeader onRefresh={app.refresh} refreshing={app.refreshing} />
+        <Text style={styles.muted}>{t('transition.writesUnavailable')}</Text>
 
         {app.tab === 'sell' && (
           <SellTab
@@ -83,7 +82,7 @@ export function AppContent() {
       ) : null}
       <ScannerModal
         visible={app.scannerOpen}
-        onClose={() => app.setScannerOpen(false)}
+        onClose={app.closeScanner}
         onBarcode={app.onBarcode}
       />
       <CartModal
@@ -119,6 +118,7 @@ export function AppContent() {
         categories={app.categories}
         setForm={app.setProductForm}
         editing={Boolean(app.editingProductId)}
+        saving={app.savingProduct}
         onClose={app.closeProductForm}
         onSave={app.saveProduct}
         onScan={() => app.openScanner('product')}

@@ -9,15 +9,17 @@ type FieldProps = {
   value: string;
   placeholder: string;
   onChangeText: (value: string) => void;
+  editable?: boolean;
   keyboardType?: 'decimal-pad' | 'numbers-and-punctuation';
 };
 
-export function Field({ label, value, placeholder, onChangeText, keyboardType }: FieldProps) {
+export function Field({ label, value, placeholder, onChangeText, keyboardType, editable = true }: FieldProps) {
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
         value={value}
+        editable={editable}
         placeholder={placeholder}
         placeholderTextColor={colors.muted}
         style={styles.input}

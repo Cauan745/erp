@@ -1,17 +1,23 @@
 # .env uses shell-compatible KEY=value entries. Never commit local credentials.
 SHELL := /bin/bash
+# An explicit device URL must take precedence over the .env emulator default.
+ifneq ($(origin EXPO_PUBLIC_API_URL),undefined)
+override EXPO_PUBLIC_API_URL := $(EXPO_PUBLIC_API_URL)
+endif
 ifneq (,$(wildcard .env))
 include .env
 export
 endif
 
-.PHONY: app-install app-start app-typecheck app-config backend-run backend-test backend-integration-test db-up db-test-up
+.PHONY: app-install app-start app-typecheck app-test app-config backend-run backend-test backend-integration-test db-up db-test-up
 app-install:
 	npm --prefix app ci
 app-start:
 	npm --prefix app run start
 app-typecheck:
 	npm --prefix app run typecheck
+app-test:
+	node app/tests/product-api.test.cjs
 app-config:
 	cd app && npx --no-install expo config --type public
 backend-run:

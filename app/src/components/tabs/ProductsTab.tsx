@@ -2,8 +2,8 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
 import { colors } from '../../constants';
-import { STOCK_REASON_AUTO_SALE_REPLENISHMENT } from '../../db';
-import { Product } from '../../db/product/types';
+import { STOCK_REASON_AUTO_SALE_REPLENISHMENT } from '../../constants';
+import { Product } from '../../repositories/product';
 import { StockHistoryEntry } from '../../db/stock/types';
 import { shortDate } from '../../formatters';
 import { useI18n } from '../../i18n';
@@ -89,6 +89,7 @@ export function ProductsTab({
             key={product.id}
             product={product}
             compact
+            inventoryWritesEnabled={false}
             onEdit={() => onEditProduct(product)}
             onStockUpdate={() => onOpenStockAdjustment(product.id)}
             onDelete={() => onDeleteProduct(product)}
@@ -113,7 +114,7 @@ export function ProductsTab({
                   {entry.quantity > 0 ? '+' : ''}{entry.quantity}
                 </Text>
                 {entry.source === 'adjustment' ? (
-                  <ActionIcon icon="✎" label={t('products.editReason')} onPress={() => onEditStockReason(entry)} />
+                  <ActionIcon icon="✎" disabled label={t('products.editReason')} onPress={() => onEditStockReason(entry)} />
                 ) : null}
               </View>
             </View>

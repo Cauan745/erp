@@ -1,6 +1,6 @@
 import { Pressable, Text, View } from 'react-native';
 
-import { Product } from '../../db/product/types';
+import { Product } from '../../repositories/product';
 import { money } from '../../formatters';
 import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
@@ -13,9 +13,10 @@ type ProductRowProps = {
   onEdit?: () => void;
   onDelete?: () => void;
   compact?: boolean;
+  inventoryWritesEnabled?: boolean;
 };
 
-export function ProductRow({ product, onPress, onStockUpdate, onEdit, onDelete, compact = false }: ProductRowProps) {
+export function ProductRow({ product, onPress, onStockUpdate, onEdit, onDelete, compact = false, inventoryWritesEnabled = true }: ProductRowProps) {
   const { locale, t } = useI18n();
 
   const body = (
@@ -39,7 +40,7 @@ export function ProductRow({ product, onPress, onStockUpdate, onEdit, onDelete, 
         ) : (
           <View style={styles.iconActionGroup}>
             {onEdit ? <ActionIcon icon="✎" label={t('products.editProduct')} onPress={onEdit} /> : null}
-            {onStockUpdate ? <ActionIcon icon="±" label={t('common.adjustStock')} onPress={onStockUpdate} /> : null}
+            {onStockUpdate ? <ActionIcon icon="±" label={t('common.adjustStock')} onPress={onStockUpdate} disabled={!inventoryWritesEnabled} /> : null}
             {onDelete ? <ActionIcon icon="×" label={t('common.delete')} onPress={onDelete} danger /> : null}
           </View>
         )}

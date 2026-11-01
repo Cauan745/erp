@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { colors } from '../../constants';
-import { Product } from '../../db/product/types';
+import { Product } from '../../repositories/product';
 import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
 

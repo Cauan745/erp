@@ -10,3 +10,5 @@ export const colors = {
   warning: '#f2c94c',
   danger: '#ff8f8f'
 };
+
+export const STOCK_REASON_AUTO_SALE_REPLENISHMENT = 'sale-shortage-replenishment';

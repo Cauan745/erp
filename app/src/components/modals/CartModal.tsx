@@ -54,7 +54,7 @@ export function CartModal({ visible, lines, total, onClose, onUpdateQuantity, on
                 <Text style={styles.totalLabel}>{t('common.total')}</Text>
                 <Text style={styles.totalValue}>{money(total, locale)}</Text>
               </View>
-              <Pressable style={styles.primaryButton} onPress={onCheckout}>
+              <Pressable style={[styles.primaryButton, { opacity: 0.4 }]} disabled accessibilityState={{ disabled: true }} onPress={onCheckout}>
                 <Text style={styles.primaryButtonText}>{t('cart.checkout')}</Text>
               </Pressable>
             </>

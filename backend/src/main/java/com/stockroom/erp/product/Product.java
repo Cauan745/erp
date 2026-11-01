@@ -41,6 +41,22 @@ public class Product {
 
     protected Product() {}
 
+    public void updateMetadata(String name, String barcode, String category, Long costCents, long sellingPriceCents) {
+        this.name = name;
+        this.barcode = barcode;
+        this.category = category;
+        this.costCents = costCents;
+        this.sellingPriceCents = sellingPriceCents;
+        this.updatedAt = Instant.now();
+    }
+
+    public void hide() {
+        if (deletedAt == null) {
+            deletedAt = Instant.now();
+            updatedAt = deletedAt;
+        }
+    }
+
     public Product(String name, String barcode, String category, Long costCents, long sellingPriceCents, int stock) {
         this.name = name;
         this.barcode = barcode;

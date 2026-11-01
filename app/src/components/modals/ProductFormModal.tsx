@@ -15,6 +15,7 @@ type ProductFormModalProps = {
   categories: string[];
   setForm: SetProductForm;
   editing: boolean;
+  saving: boolean;
   onClose: () => void;
   onSave: () => void;
   onScan: () => void;
@@ -26,6 +27,7 @@ export function ProductFormModal({
   categories,
   setForm,
   editing,
+  saving,
   onClose,
   onSave,
   onScan
@@ -45,7 +47,7 @@ export function ProductFormModal({
   }, [visible]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => { if (!saving) onClose(); }}>
       <KeyboardAvoidingView
         style={styles.productModalKeyboard}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -57,7 +59,7 @@ export function ProductFormModal({
                 <Text style={styles.eyebrow}>{t('products.catalog')}</Text>
                 <Text style={styles.modalTitle}>{editing ? t('products.editingProduct') : t('products.addProduct')}</Text>
               </View>
-              <Pressable onPress={onClose} hitSlop={8}>
+              <Pressable disabled={saving} onPress={onClose} hitSlop={8}>
                 <Text style={styles.closeText}>{t('common.close')}</Text>
               </Pressable>
             </View>
@@ -69,12 +71,14 @@ export function ProductFormModal({
               bottomOffset={16}
             >
               <Field
+                editable={!saving}
                 label={t('products.productName')}
                 value={form.name}
                 placeholder={t('products.productNamePlaceholder')}
                 onChangeText={(name) => setForm((current) => ({ ...current, name }))}
               />
               <Field
+                editable={!saving}
                 label={t('products.sellingPrice')}
                 value={form.sellingPrice}
                 placeholder={t('products.pricePlaceholder')}
@@ -82,6 +86,7 @@ export function ProductFormModal({
                 onChangeText={(sellingPrice) => setForm((current) => ({ ...current, sellingPrice }))}
               />
               <Field
+                editable={!saving}
                 label={<Text>{t('products.cost')} <Text style={styles.optional}>({t('common.optional')})</Text></Text>}
                 value={form.cost}
                 placeholder={t('products.pricePlaceholder')}
@@ -92,6 +97,7 @@ export function ProductFormModal({
                 <Text style={styles.stockUpdateCurrent}>{t('products.currentStock', { count: form.stock })}</Text>
               ) : (
                 <Field
+                  editable={!saving}
                   label={t('products.stock')}
                   value={form.stock}
                   placeholder={t('products.stockPlaceholder')}
@@ -104,11 +110,12 @@ export function ProductFormModal({
                 <Text style={styles.fieldLabel}>
                   {t('products.barcode')} <Text style={styles.optional}>({t('common.optional')})</Text>
                 </Text>
-                <Pressable onPress={onScan}>
+                <Pressable disabled={saving} onPress={onScan}>
                   <Text style={styles.linkText}>{t('products.scanBarcode')}</Text>
                 </Pressable>
               </View>
               <TextInput
+                editable={!saving}
                 value={form.barcode}
                 placeholder={t('products.barcodePlaceholder')}
                 placeholderTextColor={colors.muted}
@@ -120,6 +127,7 @@ export function ProductFormModal({
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>{t('products.category')}</Text>
                 <TextInput
+                  editable={!saving}
                   value={form.category}
                   placeholder={t('products.categoryPlaceholder')}
                   placeholderTextColor={colors.muted}
@@ -135,6 +143,7 @@ export function ProductFormModal({
                   <View style={styles.categorySuggestions}>
                     {categorySuggestions.map((category) => (
                       <Pressable
+                        disabled={saving}
                         key={category}
                         style={styles.categorySuggestion}
                         onPress={() => {
@@ -147,6 +156,7 @@ export function ProductFormModal({
                     ))}
                     {categoryQuery.length > 0 && !hasExactCategory ? (
                       <Pressable
+                        disabled={saving}
                         style={styles.categoryCreateSuggestion}
                         onPress={() => setCategoryMenuOpen(false)}
                       >
@@ -158,10 +168,10 @@ export function ProductFormModal({
                   </View>
                 ) : null}
               </View>
-              <Pressable style={styles.primaryButton} onPress={onSave}>
-                <Text style={styles.primaryButtonText}>{editing ? t('products.saveChanges') : t('products.saveLocally')}</Text>
+              <Pressable style={styles.primaryButton} disabled={saving} onPress={onSave}>
+                <Text style={styles.primaryButtonText}>{saving ? t('products.saving') : editing ? t('products.saveChanges') : t('products.save')}</Text>
               </Pressable>
-              <Pressable style={styles.secondaryButton} onPress={onClose}>
+              <Pressable style={styles.secondaryButton} disabled={saving} onPress={onClose}>
                 <Text style={styles.secondaryButtonText}>{t('common.cancel')}</Text>
               </Pressable>
             </KeyboardAwareScrollView>
