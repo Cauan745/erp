@@ -1,0 +1,21 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+**/local.properties
+# Node / Expo
+**/node_modules/
+**/.expo/
+**/dist/
+# Native outputs
+**/.gradle/
+**/build/
+**/Pods/
+# Maven / IDE
+**/target/
+.idea/
+.vscode/
+*.iml
+.DS_Store

@@ -1,0 +1,32 @@
+server:
+  port: ${API_PORT:8081}
+spring:
+  application:
+    name: stockroom-api
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:55432/stockroom}
+    username: ${SPRING_DATASOURCE_USERNAME:stockroom}
+    password: ${SPRING_DATASOURCE_PASSWORD:stockroom_dev}
+    hikari:
+      maximum-pool-size: 8
+      connection-timeout: 5000
+      connection-init-sql: "SET lock_timeout = '5s'; SET statement_timeout = '15s'"
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  sql:
+    init:
+      mode: never
+  flyway:
+    enabled: true
+  transaction:
+    default-timeout: 20s
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+      accept-float-as-int: false

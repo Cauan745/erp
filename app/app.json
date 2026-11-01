@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "Stockroom ERP",
+    "slug": "stockroom-erp",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Permita que o Stockroom escaneie códigos de barras de produtos."
+      }
+    },
+    "android": {
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "backgroundColor": "#101418"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.CAMERA"
+      ],
+      "package": "com.anonymous.stockroomerp"
+    },
+    "plugins": [
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Permita que o Stockroom escaneie códigos de barras de produtos."
+        }
+      ],
+      "expo-sqlite",
+      "expo-background-task"
+    ]
+  }
+}
