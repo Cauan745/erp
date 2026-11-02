@@ -195,33 +195,73 @@ class SaleApiIT {
         }
         assertThat(balance(good)).isEqualTo(10);
     }
-    @Test void itemInsertFailureRollsBackSaleAndAllManagedStockWrites() {
+    @Test void itemInsertFailureRollsBackSaleAndAllManagedStockWritesBeforeWaitingAdjustment() throws Exception {
         UUID a = product(10), b = product(10), requestId = UUID.randomUUID();
+        CountDownLatch locked = new CountDownLatch(1), release = new CountDownLatch(1);
         jdbc.execute("alter table sale_items add constraint test_reject_sale_product check (product_id <> '" + b + "'::uuid) not valid");
-        try {
-            assertThatThrownBy(() -> service.checkout(request(requestId, List.of(item(a, 1), item(b, 1)), "pix", null, 500, List.of())))
-                    .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
-        } finally { jdbc.execute("alter table sale_items drop constraint test_reject_sale_product"); }
-        assertMissing(requestId); assertThat(balance(a)).isEqualTo(10); assertThat(balance(b)).isEqualTo(10);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var failed = pool.submit(() -> new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                List.of(a, b).stream().sorted(Comparator.comparing(UUID::toString)).forEach(products::findByIdForUpdate);
+                locked.countDown(); await(release);
+                service.checkout(request(requestId, List.of(item(a, 1), item(b, 1)), "pix", null, 500, List.of()));
+            }));
+            assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
+            var adjustment = pool.submit(() -> stock.adjust(a, json.readValue(
+                    "{\"requestId\":\"" + UUID.randomUUID() + "\",\"quantity\":3}", CreateAdjustmentRequest.class)));
+            try { awaitBlocked("products"); assertThat(adjustment.isDone()).isFalse(); }
+            finally { release.countDown(); }
+            assertThatThrownBy(() -> failed.get(10, TimeUnit.SECONDS)).isInstanceOf(ExecutionException.class)
+                    .cause().isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+            assertThat(adjustment.get(10, TimeUnit.SECONDS).created()).isTrue();
+        } finally {
+            release.countDown();
+            jdbc.execute("alter table sale_items drop constraint test_reject_sale_product");
+        }
+        assertMissing(requestId); assertThat(balance(a)).isEqualTo(13); assertThat(balance(b)).isEqualTo(10);
         assertThat(jdbc.queryForObject("select count(*) from sale_items where product_id in (?,?)", Integer.class, a, b)).isZero();
     }
     @Test void competingLastItemCheckoutsCannotOversell() throws Exception {
-        UUID id = product(1); CyclicBarrier start = new CyclicBarrier(2);
+        UUID id = product(1);
+        CountDownLatch sold = new CountDownLatch(1), release = new CountDownLatch(1);
         try (var pool = Executors.newFixedThreadPool(2)) {
-            var a = pool.submit(() -> { start.await(); return outcome(request(UUID.randomUUID(), id, 1)); });
-            var b = pool.submit(() -> { start.await(); return outcome(request(UUID.randomUUID(), id, 1)); });
-            assertThat(List.of(a.get(10, TimeUnit.SECONDS), b.get(10, TimeUnit.SECONDS))).containsExactlyInAnyOrder("created", "insufficient_stock");
-        }
+            var a = pool.submit(() -> new TransactionTemplate(transactions).execute(status -> {
+                var result = service.checkout(request(UUID.randomUUID(), id, 1));
+                sold.countDown(); await(release); return result;
+            }));
+            assertThat(sold.await(5, TimeUnit.SECONDS)).isTrue();
+            var rejected = request(UUID.randomUUID(), id, 1);
+            var b = pool.submit(() -> outcome(rejected));
+            try { awaitBlocked("products"); assertThat(b.isDone()).isFalse(); }
+            finally { release.countDown(); }
+            assertThat(a.get(10, TimeUnit.SECONDS).created()).isTrue();
+            assertThat(b.get(10, TimeUnit.SECONDS)).isEqualTo("insufficient_stock");
+            assertMissing(rejected.requestId());
+        } finally { release.countDown(); }
         assertThat(balance(id)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from sale_items where product_id=?", Integer.class, id)).isEqualTo(1);
     }
     @Test void adjustmentAndCheckoutShareLockAndDoNotLoseUpdates() throws Exception {
-        UUID id = product(10); CyclicBarrier start = new CyclicBarrier(2);
-        try (var pool = Executors.newFixedThreadPool(2)) {
-            var a = pool.submit(() -> { start.await(); return service.checkout(request(UUID.randomUUID(), id, 2)); });
-            var b = pool.submit(() -> { start.await(); return stock.adjust(id, json.readValue("{\"requestId\":\"" + UUID.randomUUID() + "\",\"quantity\":3}", CreateAdjustmentRequest.class)); });
-            assertThat(a.get(10, TimeUnit.SECONDS).created()).isTrue(); assertThat(b.get(10, TimeUnit.SECONDS).created()).isTrue();
+        for (boolean adjustmentFirst : List.of(false, true)) {
+            UUID id = product(10);
+            var checkout = request(UUID.randomUUID(), id, 2);
+            var adjustment = json.readValue("{\"requestId\":\"" + UUID.randomUUID() + "\",\"quantity\":3}", CreateAdjustmentRequest.class);
+            CountDownLatch changed = new CountDownLatch(1), release = new CountDownLatch(1);
+            Runnable adjust = () -> stock.adjust(id, adjustment);
+            Runnable sell = () -> service.checkout(checkout);
+            try (var pool = Executors.newFixedThreadPool(2)) {
+                var a = pool.submit(() -> new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                    (adjustmentFirst ? adjust : sell).run(); changed.countDown(); await(release);
+                }));
+                assertThat(changed.await(5, TimeUnit.SECONDS)).isTrue();
+                var b = pool.submit(adjustmentFirst ? sell : adjust);
+                try { awaitBlocked("products"); assertThat(b.isDone()).isFalse(); }
+                finally { release.countDown(); }
+                a.get(10, TimeUnit.SECONDS); b.get(10, TimeUnit.SECONDS);
+            } finally { release.countDown(); }
+            assertThat(balance(id)).isEqualTo(11);
+            assertThat(stockTransactions.lookup(adjustment.requestId()).quantity()).isEqualTo(3);
+            assertThat(sales.lookup(checkout.requestId()).items()).singleElement().extracting(SaleResponse.Item::quantity).isEqualTo(2);
         }
-        assertThat(balance(id)).isEqualTo(11);
     }
     @Test void duplicateWaitingForProductReturnsWinnerEvenAfterDeletion() throws Exception {
         UUID id = product(1); var r = request(UUID.randomUUID(), id, 1);
@@ -231,9 +271,12 @@ class SaleApiIT {
                 var result = service.checkout(r); productService.delete(id); inserted.countDown(); await(release); return result;
             }));
             assertThat(inserted.await(5, TimeUnit.SECONDS)).isTrue();
+            mvc.perform(get("/api/v1/sales/by-request-id/" + r.requestId()))
+                    .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("request_not_found"));
             var duplicate = pool.submit(() -> service.checkout(r));
             try { awaitBlocked("products"); assertThat(duplicate.isDone()).isFalse(); } finally { release.countDown(); }
             assertThat(duplicate.get(10, TimeUnit.SECONDS).sale()).isEqualTo(original.get(10, TimeUnit.SECONDS).sale());
+            assertThat(sales.lookup(r.requestId())).isEqualTo(original.get(10, TimeUnit.SECONDS).sale());
         } finally { release.countDown(); }
         assertThat(balance(id)).isZero();
     }
@@ -271,6 +314,32 @@ class SaleApiIT {
                 assertThat(checkout.get(10, TimeUnit.SECONDS)).isEqualTo(deletion ? "product_missing" : "total_changed");
             } finally { release.countDown(); }
             assertThat(balance(id)).isEqualTo(10); assertMissing(r.requestId());
+        }
+    }
+    @Test void metadataAndDeletionWaitForActualCheckoutWithoutOverwritingStockOrSnapshots() throws Exception {
+        for (boolean deletion : List.of(false, true)) {
+            UUID id = product(10); var checkout = request(UUID.randomUUID(), id, 2);
+            String originalName = products.findById(id).orElseThrow().getName();
+            CountDownLatch sold = new CountDownLatch(1), release = new CountDownLatch(1);
+            try (var pool = Executors.newFixedThreadPool(2)) {
+                var sale = pool.submit(() -> new TransactionTemplate(transactions).execute(status -> {
+                    var result = service.checkout(checkout); sold.countDown(); await(release); return result;
+                }));
+                assertThat(sold.await(5, TimeUnit.SECONDS)).isTrue();
+                var metadata = pool.submit(() -> {
+                    if (deletion) productService.delete(id);
+                    else productService.update(id, json.readValue("{\"name\":\"Changed " + id + "\",\"sellingPriceCents\":999}", UpdateProductRequest.class));
+                });
+                try { awaitBlocked("products"); assertThat(metadata.isDone()).isFalse(); }
+                finally { release.countDown(); }
+                assertThat(sale.get(10, TimeUnit.SECONDS).created()).isTrue(); metadata.get(10, TimeUnit.SECONDS);
+            } finally { release.countDown(); }
+            assertThat(balance(id)).isEqualTo(8);
+            assertThat(sales.lookup(checkout.requestId()).items()).singleElement().satisfies(line -> {
+                assertThat(line.productName()).isEqualTo(originalName);
+                assertThat(line.unitPriceCents()).isEqualTo(250);
+                assertThat(line.lineTotalCents()).isEqualTo(500);
+            });
         }
     }
     @Test void reversedCartOrderLocksCanonicalFirstWithoutLockingLaterProduct() throws Exception {
@@ -329,7 +398,7 @@ class SaleApiIT {
     private void awaitBlocked(String table) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (System.nanoTime() < deadline) {
-            int count = jdbc.queryForObject("select count(*) from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like ?", Integer.class, "%" + table + "%");
+            int count = jdbc.queryForObject("select count(*) from pg_stat_activity where datname=current_database() and pid <> pg_backend_pid() and cardinality(pg_blocking_pids(pid)) > 0 and wait_event_type='Lock' and query like ?", Integer.class, "%" + table + "%");
             if (count > 0) return;
             Thread.sleep(20);
         }

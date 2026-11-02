@@ -163,14 +163,35 @@ class StockApiIT {
 
     @Test void concurrentSignedAdjustmentsSerializeWithoutLosingUpdates() throws Exception {
         UUID id = product(10);
-        CyclicBarrier start = new CyclicBarrier(2);
+        CountDownLatch changed = new CountDownLatch(1), release = new CountDownLatch(1);
         try (var pool = Executors.newFixedThreadPool(2)) {
-            var a = pool.submit(() -> { start.await(); return service.adjust(id, request(UUID.randomUUID(), 5)); });
-            var b = pool.submit(() -> { start.await(); return service.adjust(id, request(UUID.randomUUID(), -3)); });
+            var a = pool.submit(() -> new TransactionTemplate(transactions).execute(status -> {
+                var result = service.adjust(id, request(UUID.randomUUID(), 5));
+                changed.countDown(); await(release); return result;
+            }));
+            assertThat(changed.await(5, TimeUnit.SECONDS)).isTrue();
+            var b = pool.submit(() -> service.adjust(id, request(UUID.randomUUID(), -3)));
+            try { awaitBlocked("products"); assertThat(b.isDone()).isFalse(); }
+            finally { release.countDown(); }
             assertThat(a.get(10, TimeUnit.SECONDS).created()).isTrue();
             assertThat(b.get(10, TimeUnit.SECONDS).created()).isTrue();
-        }
+        } finally { release.countDown(); }
         assertThat(balance(id)).isEqualTo(12);
+        assertThat(stock.history(1000)).filteredOn(row -> row.productId().equals(id)).hasSize(2);
+    }
+
+    @Test void adjustmentInsertFailureRollsBackManagedStockAndTimestamp() {
+        UUID id = product(10), requestId = UUID.randomUUID();
+        var before = jdbc.queryForMap("select stock, updated_at from products where id=?", id);
+        jdbc.execute("alter table stock_adjustments add constraint test_reject_adjustment_product check (product_id <> '" + id + "'::uuid) not valid");
+        try {
+            assertThatThrownBy(() -> service.adjust(id, request(requestId, 3)))
+                    .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        } finally { jdbc.execute("alter table stock_adjustments drop constraint test_reject_adjustment_product"); }
+        assertThat(jdbc.queryForMap("select stock, updated_at from products where id=?", id)).isEqualTo(before);
+        assertThat(stock.history(1000)).noneMatch(row -> row.productId().equals(id));
+        assertThatThrownBy(() -> stock.lookup(requestId)).isInstanceOfSatisfying(ApiException.class,
+                error -> assertThat(error.code()).isEqualTo("request_not_found"));
     }
 
     @Test void duplicateWaitsThenReturnsCommittedWinnerEvenAfterProductHidden() throws Exception {
@@ -184,10 +205,14 @@ class StockApiIT {
                 inserted.countDown(); await(release); return result;
             }));
             assertThat(inserted.await(5, TimeUnit.SECONDS)).isTrue();
+            // Another connection cannot see the uncommitted POST. A miss is not cancellation.
+            mvc.perform(get("/api/v1/stock/adjustments/by-request-id/" + requestId))
+                    .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("request_not_found"));
             var duplicate = pool.submit(() -> service.adjust(id, request));
             try { awaitBlocked("products"); assertThat(duplicate.isDone()).isFalse(); }
             finally { release.countDown(); }
             assertThat(duplicate.get(10, TimeUnit.SECONDS).adjustment()).isEqualTo(original.get(10, TimeUnit.SECONDS).adjustment());
+            assertThat(stock.lookup(requestId)).isEqualTo(original.get(10, TimeUnit.SECONDS).adjustment());
             assertThat(balance(id)).isZero();
         } finally { release.countDown(); }
     }
@@ -251,7 +276,7 @@ class StockApiIT {
     private void awaitBlocked(String table) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (System.nanoTime() < deadline) {
-            Integer count = jdbc.queryForObject("select count(*) from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like ?", Integer.class, "%" + table + "%");
+            Integer count = jdbc.queryForObject("select count(*) from pg_stat_activity where datname=current_database() and pid <> pg_backend_pid() and cardinality(pg_blocking_pids(pid)) > 0 and wait_event_type='Lock' and query like ?", Integer.class, "%" + table + "%");
             if (count != null && count > 0) return;
             Thread.sleep(20);
         }

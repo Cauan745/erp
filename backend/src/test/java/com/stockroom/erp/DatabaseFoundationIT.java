@@ -98,8 +98,12 @@ class DatabaseFoundationIT {
         assertThat(sales.findByRequestId(saleRequest).orElseThrow().getPaymentMethod()).isEqualTo(PaymentMethod.CASH);
         assertThat(items.findBySaleIdInOrderBySaleIdAscLineNumberAsc(List.of(sale.getId())))
                 .extracting(SaleItem::getId).containsExactly(line.getId());
+        StockAdjustment managed = adjustments.findByRequestId(adjustmentRequest).orElseThrow();
+        assertThat(em.contains(managed)).isTrue();
         assertThat(adjustments.updateReason(adjustment.getId(), "counted")).isEqualTo(1);
+        assertThat(em.contains(managed)).isFalse();
         StockAdjustment saved = adjustments.findByRequestId(adjustmentRequest).orElseThrow();
+        assertThat(saved).isNotSameAs(managed);
         assertThat(saved.getQuantity()).isEqualTo(-2);
         // PostgreSQL timestamps round to microseconds.
         assertThat(saved.getCreatedAt()).isEqualTo(created);
