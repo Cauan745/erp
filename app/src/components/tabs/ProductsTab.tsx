@@ -3,8 +3,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
 import { colors } from '../../constants';
 import { STOCK_REASON_AUTO_SALE_REPLENISHMENT } from '../../constants';
-import { Product } from '../../repositories/product';
-import { StockHistoryEntry } from '../../types';
+import { Product, StockHistoryEntry } from '../../types';
 import { shortDate } from '../../formatters';
 import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
@@ -78,7 +77,7 @@ export function ProductsTab({
             <Text style={styles.addProductButtonText}>＋</Text>
           </Pressable>
         </View>
-        <Text style={styles.muted}>{t('products.localCatalogDescription')}</Text>
+        <Text style={styles.muted}>{t('products.catalogDescription')}</Text>
 
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>⌕</Text>

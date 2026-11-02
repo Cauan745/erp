@@ -2,11 +2,8 @@ import { API_BASE_URL, apiRequest } from '../api/client';
 import { createUuid } from '../api/ids';
 import { clearRecoveryMarker, isDefinitiveRejection, RecoveryMarker, saveRecoveryMarker } from '../api/requestRecovery';
 import { AppError } from '../errors';
-import { StockHistoryEntry } from '../types';
+import { Adjustment, StockHistoryEntry } from '../types';
 
-export type Adjustment = {
-  id: string; requestId: string; productId: string; quantity: number; reason: string | null; createdAt: string;
-};
 const integer = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n)
   && n >= -2147483648 && n <= 2147483647 && n !== 0;
 const uuid = (v: unknown): v is string => typeof v === 'string'

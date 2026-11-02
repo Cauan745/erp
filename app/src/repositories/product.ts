@@ -1,16 +1,6 @@
 import { apiRequest, ApiError } from '../api/client';
 import { AppError } from '../errors';
-
-export type Product = {
-  id: string; name: string; barcode: string; category: string;
-  cost: number | null; sellingPrice: number; sellingPriceCents: number; profit: number | null; stock: number;
-  createdAt: string; updatedAt: string;
-};
-export type ProductInput = {
-  name: string; barcode: string; category: string; cost: number | null; sellingPrice: number;
-};
-export type CreateProductInput = ProductInput & { stock?: number };
-export type UpdateProductInput = ProductInput;
+import { Product, ProductInput, CreateProductInput, UpdateProductInput } from '../types';
 
 function productFromResponse(value: unknown): Product {
   if (typeof value !== 'object' || value === null) throw new AppError('apiResponseInvalid');

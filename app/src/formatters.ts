@@ -37,23 +37,15 @@ const errorKeys: Record<AppErrorCode, TranslationKey> = {
   networkUnavailable: 'errors.networkUnavailable',
   requestTimeout: 'errors.requestTimeout',
   apiResponseInvalid: 'errors.apiResponseInvalid',
-  databaseUnavailable: 'errors.databaseUnavailable',
   productPrice: 'errors.productPrice',
   productCost: 'errors.productCost',
   productNameRequired: 'errors.productNameRequired',
-  productNameDuplicate: 'errors.productNameDuplicate',
-  productBarcodeDuplicate: 'errors.productBarcodeDuplicate',
   productStockInteger: 'errors.productStockInteger',
   stockChangeInteger: 'errors.stockChangeInteger',
-  stockAdjustmentMissing: 'errors.stockAdjustmentMissing',
-  productMissing: 'errors.productMissing',
-  stockQuantityPositive: 'errors.stockQuantityPositive',
   emptySale: 'errors.emptySale',
   saleQuantityPositive: 'errors.saleQuantityPositive',
   paymentMethodInvalid: 'errors.paymentMethodInvalid',
   cashReceivedInvalid: 'errors.cashReceivedInvalid',
-  stockReservation: 'errors.stockReservation',
-  saleTransaction: 'errors.saleTransaction',
   unknown: 'errors.unknown'
 };
 

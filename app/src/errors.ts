@@ -4,23 +4,15 @@ export type AppErrorCode =
   | 'networkUnavailable'
   | 'requestTimeout'
   | 'apiResponseInvalid'
-  | 'databaseUnavailable'
   | 'productPrice'
   | 'productCost'
   | 'productNameRequired'
-  | 'productNameDuplicate'
-  | 'productBarcodeDuplicate'
   | 'productStockInteger'
   | 'stockChangeInteger'
-  | 'stockAdjustmentMissing'
-  | 'productMissing'
-  | 'stockQuantityPositive'
   | 'emptySale'
   | 'saleQuantityPositive'
   | 'paymentMethodInvalid'
   | 'cashReceivedInvalid'
-  | 'stockReservation'
-  | 'saleTransaction'
   | 'unknown';
 
 export class AppError extends Error {

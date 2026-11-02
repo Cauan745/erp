@@ -132,21 +132,41 @@ test('the app import graph cannot reach SQLite repositories or sync workers', ()
   function visit(file) {
     if (visited.has(file)) return;
     visited.add(file);
-    assert.doesNotMatch(file, /[/\\]src[/\\](sync[/\\]|db[/\\](db|index|transactions)\.ts|db[/\\][^/\\]+[/\\]repository\.ts)/);
+    assert.doesNotMatch(file, /[/\\]src[/\\](sync|db)[/\\]/);
     const ast = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
-    for (const statement of ast.statements) {
-      if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) continue;
-      if (!statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-      if (statement.importClause?.isTypeOnly || statement.isTypeOnly) continue;
-      const name = statement.moduleSpecifier.text;
-      assert.notEqual(name, 'expo-sqlite');
-      if (!name.startsWith('.')) continue;
+    function checkImport(name) {
+      assert.doesNotMatch(name, /^(expo-sqlite|expo-background-task|expo-task-manager)(\/|$)/);
+      if (!name.startsWith('.')) return;
       const base = path.resolve(path.dirname(file), name);
       const next = [base + '.ts', base + '.tsx', path.join(base, 'index.ts')].find(existsSync);
       assert.ok(next, `Missing local import ${name} in ${file}`);
       visit(next);
     }
+    function walk(node) {
+      if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier
+          && ts.isStringLiteral(node.moduleSpecifier)) checkImport(node.moduleSpecifier.text);
+      if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword
+          || ts.isIdentifier(node.expression) && node.expression.text === 'require')) {
+        assert.ok(node.arguments.length === 1 && ts.isStringLiteral(node.arguments[0]), 'Imports must be statically auditable');
+        checkImport(node.arguments[0].text);
+      }
+      ts.forEachChild(node, walk);
+    }
+    walk(ast);
   }
   visit(path.join(app, 'App.tsx'));
   assert.ok(visited.has(path.join(app, 'src/api/client.ts')));
+  assert.ok(visited.has(path.join(app, 'src/api/requestRecovery.ts')));
+  assert.ok(visited.has(path.join(app, 'src/api/ids.ts')));
+  assert.ok(visited.has(path.join(app, 'src/app/legacyTaskCleanup.ts')));
+});
+
+test('removed packages and plugins are absent from manifests and lockfile', () => {
+  const { readFileSync, existsSync } = require('node:fs');
+  for (const name of ['package.json', 'package-lock.json', 'app.json']) {
+    assert.doesNotMatch(readFileSync(path.join(app, name), 'utf8'), /expo-(sqlite|background-task|task-manager)/);
+  }
+  for (const name of ['src/db', 'src/sync', 'src/components/StartupScreen.tsx']) {
+    assert.equal(existsSync(path.join(app, name)), false);
+  }
 });

@@ -2,7 +2,7 @@ import { API_BASE_URL, ApiError, apiRequest } from '../api/client';
 import { createUuid } from '../api/ids';
 import { clearRecoveryMarker, isDefinitiveRejection, RecoveryMarker, saveRecoveryMarker } from '../api/requestRecovery';
 import { AppError } from '../errors';
-import { CartLine, PaymentMethod, Sale } from '../types';
+import { CartLine, CheckoutInput, PaymentMethod, PriceReview, Sale, Shortage } from '../types';
 
 const money = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
 const quantity = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v > 0 && v <= 2147483647;
@@ -31,8 +31,6 @@ function sale(value: unknown): Sale {
     lines: s.items.map(i => ({ productId: i.productId, name: i.productName, quantity: i.quantity,
       unitPrice: i.unitPriceCents / 100, lineTotal: i.lineTotalCents / 100 })) };
 }
-export type CheckoutInput = { items: { productId: string; quantity: number }[]; paymentMethod: PaymentMethod;
-  cashReceivedCents: number | null; expectedTotalCents: number; allowInsufficientStockProductIds: string[] };
 export function checkoutInput(lines: CartLine[], paymentMethod: PaymentMethod, cash: number | null): CheckoutInput {
   if (!lines.length) throw new AppError('emptySale');
   let total = 0;
@@ -49,9 +47,6 @@ export function checkoutInput(lines: CartLine[], paymentMethod: PaymentMethod, c
     cashReceivedCents: cash, expectedTotalCents: total,
     allowInsufficientStockProductIds: lines.filter(l => l.allowInsufficientStock).map(l => l.productId) };
 }
-export type PriceReview = { actualTotalCents: number; items: { productId: string; productName: string;
-  quantity: number; unitPriceCents: number; lineTotalCents: number }[] };
-export type Shortage = { productId: string; productName: string; requested: number; available: number };
 export function priceReview(error: ApiError, input: CheckoutInput): PriceReview {
   const d = error.details as PriceReview;
   if (!d || !money(d.actualTotalCents) || !Array.isArray(d.items) || d.items.length !== input.items.length

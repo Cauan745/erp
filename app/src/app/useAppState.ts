@@ -1,18 +1,17 @@
 import { Alert, AppState } from 'react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { createProduct, deleteProduct, findProductByBarcode, listProducts, updateProduct, Product } from '../repositories';
-import { PaymentMethod, Sale } from '../types';
+import { createProduct, deleteProduct, findProductByBarcode, listProducts, updateProduct } from '../repositories';
 import { checkout, checkoutInput, listSales, lookupSale, priceReview, stockShortages } from '../repositories/sale';
-import { StockHistoryEntry } from '../types';
 import { adjustStock, listStockHistory, lookupAdjustment, updateStockReason } from '../repositories/stock';
 import { clearRecoveryMarker, listRecoveryMarkers, RecoveryMarker } from '../api/requestRecovery';
 import { API_BASE_URL, ApiError } from '../api/client';
 import { STOCK_REASON_AUTO_SALE_REPLENISHMENT } from '../constants';
 import { errorMessage, mutationErrorMessage, readErrorMessage, uncertainMutation } from '../formatters';
 import { useOnlineList } from './useOnlineList';
+import { removeLegacyTask } from './legacyTaskCleanup';
 import { useI18n } from '../i18n';
-import { Cart, CartLine, ProductForm, SetProductForm, Tab } from '../types';
+import { Cart, CartLine, PaymentMethod, Product, ProductForm, Sale, SetProductForm, StockHistoryEntry, Tab } from '../types';
 
 const emptyProductForm: ProductForm = {
   name: '',
@@ -25,6 +24,21 @@ const emptyProductForm: ProductForm = {
 
 export function useAppState() {
   const { t } = useI18n();
+  const legacyCleanupPending = useRef(false);
+  const [legacyTaskCleanupFailed, setLegacyTaskCleanupFailed] = useState(false);
+  const retryLegacyTaskCleanup = useCallback(async () => {
+    if (legacyCleanupPending.current) return;
+    legacyCleanupPending.current = true;
+    try {
+      await removeLegacyTask();
+      setLegacyTaskCleanupFailed(false);
+    } catch {
+      setLegacyTaskCleanupFailed(true);
+    } finally {
+      legacyCleanupPending.current = false;
+    }
+  }, []);
+  useEffect(() => { void retryLegacyTaskCleanup(); }, [retryLegacyTaskCleanup]);
   const scanAccepted = useRef(true);
   const productWritePending = useRef(false);
   const [savingProduct, setSavingProduct] = useState(false);
@@ -623,6 +637,8 @@ export function useAppState() {
   };
 
   return {
+    legacyTaskCleanupFailed,
+    retryLegacyTaskCleanup,
     tab,
     setTab,
     products,

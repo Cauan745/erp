@@ -18,7 +18,7 @@ export function ListStatus({ loading, refreshing, error, onRetry }: ListStatusPr
     </Text> : null}
     {error ? <Text style={styles.errorText}>{error}</Text> : null}
     {!loading ? <Pressable disabled={refreshing} onPress={onRetry} accessibilityRole="button">
-      <Text style={styles.closeText}>{t(error ? 'startup.retry' : 'header.refresh')}</Text>
+      <Text style={styles.closeText}>{t(error ? 'common.retry' : 'header.refresh')}</Text>
     </Pressable> : null}
   </View>;
 }

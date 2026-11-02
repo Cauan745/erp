@@ -1,8 +1,8 @@
 # Agent instructions
 
-## Purpose and transition
+## Purpose
 
-Build the online-first Stockroom MVP described in `docs/online-first-rebuild-plan.md`. The copied Expo app remains the source for screens and business behavior. Its local SQLite/sync code is temporary and will be removed as the conversion completes. Do not ship mixed API product writes and SQLite sales. Disable unmigrated writes in transitional API builds.
+Build the online-first Stockroom MVP described in `docs/online-first-rebuild-plan.md`. Preserve the Expo app's screens and business behavior. Products, stock, checkout, and history use the API. The copied SQLite repositories and synchronization architecture have been removed; do not restore them or mix API writes with local business writes.
 
 PostgreSQL is the target source of truth. UI writes explicitly call the API. Never add offline business storage, a queue, synchronization, automatic mutation replay, authentication, or object recognition.
 
@@ -24,9 +24,11 @@ Keep existing screen layouts, scanner, safe areas, and keyboard handling. Put AP
 
 Use typed i18n, pt-BR by default and English fallback, for all user-facing labels, errors, permission text, and connection messages. Internal codes and product data stay untranslated. Format BRL and dates for the locale. Failed requests preserve input and old fetched data. A failed refresh after a confirmed write must not turn that write into a reported failure.
 
+Keep business types in app/src/types.ts, the replenishment reason constant in app/src/constants.ts, and the online request UUID helper in app/src/api/ids.ts. The optional native task-unregistration bridge in app/src/app/legacyTaskCleanup.ts exists only for upgrades of older installed builds. It never defines, registers, or executes a task. Follow the README upgrade sequence before replacing an installation that may have registered legacy tasks. Preserve all device data and recovery markers; never uninstall or clear storage to remove native dependencies. Preserve intentional tracked Android customizations rather than regenerating the native project.
+
 ## Checks and handoff
 
-Run make app-typecheck after TypeScript changes, make backend-test after Java changes, and make app-config after Expo/plugin changes. Run make db-test-up and make backend-integration-test for actual PostgreSQL coverage. Report unavailable integration/device coverage explicitly. Do not use an in-memory database as proof of PostgreSQL constraints or locks.
+Run make app-typecheck and make app-test after TypeScript changes, make backend-test after Java changes, and make app-config after Expo/plugin changes. Run make db-test-up and make backend-integration-test for actual PostgreSQL coverage. Audit runtime imports, lockfiles, Expo configuration, and native autolinking after dependency removal. Report unavailable integration/device coverage explicitly. JavaScript checks on an existing development build do not verify native dependency removal. Do not use an in-memory database as proof of PostgreSQL constraints or locks.
 
 Explain each implemented feature's entity mappings, repository queries, DTO mapping, and transaction using its code in the handoff. Track actual results in docs/implementation-progress.md.
 

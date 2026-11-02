@@ -1,6 +1,6 @@
 import { Pressable, Text, View } from 'react-native';
 
-import { Product } from '../../repositories/product';
+import { Product } from '../../types';
 import { money } from '../../formatters';
 import { useI18n } from '../../i18n';
 import { styles } from '../../styles';

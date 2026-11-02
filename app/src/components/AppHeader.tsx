@@ -11,8 +11,8 @@ export function AppHeader({ onRefresh, refreshing }: { onRefresh: () => void; re
         <Text style={styles.eyebrow}>{t('header.onlineCatalog')}</Text>
         <Text style={styles.title}>stockroom</Text>
       </View>
-      <Pressable style={styles.syncPill} disabled={refreshing} onPress={onRefresh} accessibilityRole="button">
-        <Text style={styles.syncText}>{t(refreshing ? 'header.refreshing' : 'header.refresh')}</Text>
+      <Pressable style={styles.refreshButton} disabled={refreshing} onPress={onRefresh} accessibilityRole="button">
+        <Text style={styles.refreshButtonText}>{t(refreshing ? 'header.refreshing' : 'header.refresh')}</Text>
       </Pressable>
     </View>
   );

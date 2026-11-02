@@ -1,4 +1,15 @@
-import type React from 'react';
+import type { Dispatch, SetStateAction } from 'react';
+
+export type Product = {
+  id: string; name: string; barcode: string; category: string;
+  cost: number | null; sellingPrice: number; sellingPriceCents: number; profit: number | null; stock: number;
+  createdAt: string; updatedAt: string;
+};
+export type ProductInput = {
+  name: string; barcode: string; category: string; cost: number | null; sellingPrice: number;
+};
+export type CreateProductInput = ProductInput & { stock?: number };
+export type UpdateProductInput = ProductInput;
 
 export type Tab = 'sell' | 'products' | 'sales';
 export type CartLine = SaleLine & {
@@ -16,7 +27,7 @@ export type ProductForm = {
   category: string;
 };
 
-export type SetProductForm = React.Dispatch<React.SetStateAction<ProductForm>>;
+export type SetProductForm = Dispatch<SetStateAction<ProductForm>>;
 
 export type StockHistoryEntry = {
   id: string;
@@ -36,3 +47,15 @@ export type Sale = {
   id: string; requestId: string; lines: SaleLine[]; total: number;
   paymentMethod: PaymentMethod; cashReceived: number | null; change: number | null; createdAt: string;
 };
+
+export type Adjustment = {
+  id: string; requestId: string; productId: string; quantity: number; reason: string | null; createdAt: string;
+};
+
+export type CheckoutInput = { items: { productId: string; quantity: number }[]; paymentMethod: PaymentMethod;
+  cashReceivedCents: number | null; expectedTotalCents: number; allowInsufficientStockProductIds: string[] };
+
+export type PriceReview = { actualTotalCents: number; items: { productId: string; productName: string;
+  quantity: number; unitPriceCents: number; lineTotalCents: number }[] };
+
+export type Shortage = { productId: string; productName: string; requested: number; available: number };

@@ -28,6 +28,7 @@ const react = {
   useMemo: fn => fn(), useCallback: fn => fn, useEffect: () => {}
 };
 Module._load = function(id, ...args) {
+  if (id === 'expo') return { requireOptionalNativeModule: () => null };
   if (id === 'react') return react;
   if (id === 'react-native') return { TurboModuleRegistry: { get: () => ({}) }, Alert: {
     alert: (title, message, buttons) => {
