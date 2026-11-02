@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Build the online-first Stockroom MVP described in `docs/online-first-rebuild-plan.md`. Preserve the Expo app's screens and business behavior. Products, stock, checkout, and history use the API. The copied SQLite repositories and synchronization architecture have been removed; do not restore them or mix API writes with local business writes.
+Maintain the completed online-first Stockroom MVP. Current setup and verification results are in `README.md`; business rules and DTOs are in `docs/api-contract.md`. Preserve the Expo app's screens and business behavior. Products, stock, checkout, and history use the API. The copied SQLite repositories and synchronization architecture have been removed; do not restore them or mix API writes with local business writes.
+
+This is an unreleased beta with no users to migrate. Support the current version only. Do not add compatibility bridges, legacy task cleanup, or old-version migration paths unless explicitly requested.
 
 PostgreSQL is the target source of truth. UI writes explicitly call the API. Never add offline business storage, a queue, synchronization, automatic mutation replay, authentication, or object recognition.
 
@@ -24,12 +26,12 @@ Keep existing screen layouts, scanner, safe areas, and keyboard handling. Put AP
 
 Use typed i18n, pt-BR by default and English fallback, for all user-facing labels, errors, permission text, and connection messages. Internal codes and product data stay untranslated. Format BRL and dates for the locale. Failed requests preserve input and old fetched data. A failed refresh after a confirmed write must not turn that write into a reported failure.
 
-Keep business types in app/src/types.ts, the replenishment reason constant in app/src/constants.ts, and the online request UUID helper in app/src/api/ids.ts. The optional native task-unregistration bridge in app/src/app/legacyTaskCleanup.ts exists only for upgrades of older installed builds. It never defines, registers, or executes a task. Follow the README upgrade sequence before replacing an installation that may have registered legacy tasks. Preserve all device data and recovery markers; never uninstall or clear storage to remove native dependencies. Preserve intentional tracked Android customizations rather than regenerating the native project.
+Keep business types in app/src/types.ts, the replenishment reason constant in app/src/constants.ts, and the online request UUID helper in app/src/api/ids.ts. Preserve all device data and recovery markers; never uninstall or clear storage to remove native dependencies. Preserve intentional tracked Android customizations rather than regenerating the native project.
 
 ## Checks and handoff
 
 Run make app-typecheck and make app-test after TypeScript changes, make backend-test after Java changes, and make app-config after Expo/plugin changes. Run make db-test-up and make backend-integration-test for actual PostgreSQL coverage. Audit runtime imports, lockfiles, Expo configuration, and native autolinking after dependency removal. Report unavailable integration/device coverage explicitly. JavaScript checks on an existing development build do not verify native dependency removal. Do not use an in-memory database as proof of PostgreSQL constraints or locks.
 
-Explain each implemented feature's entity mappings, repository queries, DTO mapping, and transaction using its code in the handoff. Track actual results in docs/implementation-progress.md.
+Explain each implemented feature's entity mappings, repository queries, DTO mapping, and transaction using its code in the handoff. Report actual check results and verification limits in the handoff. Update the README verification baseline when reverified. Completed rebuild plans and handoffs are available in Git history at `eb16296`; do not recreate an archive directory for them.
 
 Native Android builds have frozen/crashed the host. Ask for explicit confirmation immediately before running ./gradlew, expo run:android, or any wrapper that invokes them. Starting Expo alone is safe and does not build native code. VisionCamera cannot run in Expo Go. After UI checks, pause for the user's device verification before committing UI changes or posting issue updates. Do not create commits unless requested.

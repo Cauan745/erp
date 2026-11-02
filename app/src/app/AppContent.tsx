@@ -29,9 +29,6 @@ export function AppContent() {
       <View style={styles.container}>
         <AppHeader onRefresh={app.refresh} refreshing={app.refreshing} />
 
-        {app.legacyTaskCleanupFailed ? <Pressable accessibilityRole="button" onPress={() => { void app.retryLegacyTaskCleanup(); }}>
-          <Text style={styles.muted}>{t('upgrade.cleanupFailed')} · {t('common.retry')}</Text>
-        </Pressable> : null}
         {app.recoveryError ? <Pressable onPress={() => { void app.loadRecovery(); }}>
           <Text style={styles.muted}>{app.recoveryError} · {t('common.retry')}</Text>
         </Pressable> : null}

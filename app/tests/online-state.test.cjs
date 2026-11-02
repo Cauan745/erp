@@ -14,7 +14,7 @@ execFileSync(process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'
 
 // These doubles execute startup/foreground effects and their cleanup, with stable callbacks.
 // They test action ordering and state transitions, not React Native rendering.
-let active, alerts, calls, listeners, harnesses, nativeTaskManager;
+let active, alerts, calls, listeners, harnesses;
 const sameDeps = (a, b) => a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
 const react = {
   useState(initial) {
@@ -48,10 +48,6 @@ const appState = {
   addEventListener(event, fn) { assert.equal(event, 'change'); listeners.add(fn); return { remove: () => listeners.delete(fn) }; }
 };
 Module._load = function(id, ...args) {
-  if (id === 'expo') return { requireOptionalNativeModule: name => {
-    assert.equal(name, 'ExpoTaskManager');
-    return nativeTaskManager;
-  } };
   if (id === 'react') return react;
   if (id === 'react-native') return { AppState: appState, TurboModuleRegistry: { get: () => ({}) },
     Alert: { alert: (title, message, buttons) => alerts.push({ title, message, buttons }) } };
@@ -106,7 +102,7 @@ function foreground() {
     for (const fn of listeners) fn(state);
   }
 }
-beforeEach(() => { alerts = []; calls = []; store.clear(); listeners = new Set(); harnesses = []; nativeTaskManager = null; appState.currentState = 'active'; serve(); });
+beforeEach(() => { alerts = []; calls = []; store.clear(); listeners = new Set(); harnesses = []; appState.currentState = 'active'; serve(); });
 afterEach(async () => {
   for (const h of harnesses) h.unmount();
   await settle();
@@ -336,85 +332,4 @@ test('a server error on a read uses loading wording without implying that a muta
   const h = harness(); await settle(); h.render();
   assert.equal(h.app.catalogError, 'errors.readFailed'); assert.equal(h.app.historyError, 'errors.readFailed');
   assert.equal(h.app.salesError, 'errors.readFailed'); assert.equal(alerts.length, 0);
-});
-
-test('legacy upgrade cleanup removes only its task and preserves every recovery marker and stored value', async () => {
-  await recovery.saveRecoveryMarker(marker());
-  await recovery.saveRecoveryMarker(marker(otherId, 'adjustment', 'http://previous-server:8081'));
-  store.set('existing-device-data', 'unchanged');
-  const before = [...store];
-  const registered = new Set(['stockroom-background-sync', 'unrelated-task']);
-  const removed = [];
-  nativeTaskManager = {
-    isTaskRegisteredAsync: async name => registered.has(name),
-    unregisterTaskAsync: async name => { removed.push(name); registered.delete(name); }
-  };
-  const h = harness(); await settle(); h.render();
-  assert.deepEqual(removed, ['stockroom-background-sync']);
-  assert.deepEqual([...registered], ['unrelated-task']);
-  assert.deepEqual([...store], before);
-  assert.equal(h.app.markers.length, 2);
-  assert.equal(h.app.legacyTaskCleanupFailed, false);
-  foreground(); await settle(); h.render();
-  assert.deepEqual(removed, ['stockroom-background-sync']);
-  assert.ok(calls.every(c => c.init.method === undefined));
-});
-
-test('legacy cleanup skips absent native modules and unregistered tasks without changing data', async () => {
-  const h = harness(); await settle(); h.render();
-  assert.equal(h.app.legacyTaskCleanupFailed, false);
-  let checks = 0;
-  nativeTaskManager = {
-    isTaskRegisteredAsync: async name => { assert.equal(name, 'stockroom-background-sync'); checks++; return false; },
-    unregisterTaskAsync: async () => assert.fail('No registered task to remove')
-  };
-  await h.app.retryLegacyTaskCleanup(); h.render();
-  assert.equal(checks, 1);
-  assert.equal(h.app.legacyTaskCleanupFailed, false);
-  assert.equal(store.size, 0);
-});
-
-test('failed legacy cleanup stays visible with a manual retry and does not block API reads or recovery', async () => {
-  await recovery.saveRecoveryMarker(marker());
-  const before = [...store];
-  let attempts = 0;
-  nativeTaskManager = {
-    isTaskRegisteredAsync: async () => { attempts++; throw new Error('native failure'); },
-    unregisterTaskAsync: async () => assert.fail('Registration check failed')
-  };
-  const h = harness(); await settle(); h.render();
-  assert.equal(h.app.legacyTaskCleanupFailed, true);
-  assert.equal(h.app.products.length, 1); assert.equal(h.app.sales.length, 1); assert.equal(h.app.markers.length, 1);
-  foreground(); h.app.refresh(); await settle(); h.render();
-  assert.equal(attempts, 1);
-  assert.deepEqual([...store], before);
-  nativeTaskManager.isTaskRegisteredAsync = async () => false;
-  await h.app.retryLegacyTaskCleanup(); h.render();
-  assert.equal(h.app.legacyTaskCleanupFailed, false);
-  assert.deepEqual([...store], before);
-  assert.ok(calls.every(c => c.init.method === undefined));
-});
-
-test('legacy cleanup serializes repeated attempts and exposes unregister rejection', async () => {
-  const wait = gate();
-  let attempts = 0;
-  nativeTaskManager = {
-    isTaskRegisteredAsync: async () => true,
-    unregisterTaskAsync: () => { attempts++; return wait.promise; }
-  };
-  const h = harness(); await settle(); h.render();
-  await h.app.retryLegacyTaskCleanup(); await h.app.retryLegacyTaskCleanup();
-  assert.equal(attempts, 1);
-  wait.reject(new Error('cannot unregister')); await settle(); h.render();
-  assert.equal(h.app.legacyTaskCleanupFailed, true);
-});
-
-test('legacy cleanup reports failure if the task is still registered after unregistration', async () => {
-  nativeTaskManager = {
-    isTaskRegisteredAsync: async () => true,
-    unregisterTaskAsync: async () => {}
-  };
-  const h = harness(); await settle(); h.render();
-  assert.equal(h.app.legacyTaskCleanupFailed, true);
-  assert.equal(h.app.products.length, 1);
 });

@@ -133,7 +133,9 @@ test('the app import graph cannot reach SQLite repositories or sync workers', ()
     if (visited.has(file)) return;
     visited.add(file);
     assert.doesNotMatch(file, /[/\\]src[/\\](sync|db)[/\\]/);
-    const ast = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+    const source = readFileSync(file, 'utf8');
+    assert.doesNotMatch(source, /ExpoTaskManager|stockroom-background-sync|requireOptionalNativeModule/);
+    const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
     function checkImport(name) {
       assert.doesNotMatch(name, /^(expo-sqlite|expo-background-task|expo-task-manager)(\/|$)/);
       if (!name.startsWith('.')) return;
@@ -158,7 +160,6 @@ test('the app import graph cannot reach SQLite repositories or sync workers', ()
   assert.ok(visited.has(path.join(app, 'src/api/client.ts')));
   assert.ok(visited.has(path.join(app, 'src/api/requestRecovery.ts')));
   assert.ok(visited.has(path.join(app, 'src/api/ids.ts')));
-  assert.ok(visited.has(path.join(app, 'src/app/legacyTaskCleanup.ts')));
 });
 
 test('removed packages and plugins are absent from manifests and lockfile', () => {

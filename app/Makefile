@@ -1,4 +1,5 @@
 .PHONY: run
 
+# Keep the existing shortcut, using root configuration and Metro-only startup.
 run:
-	npm run android
+	$(MAKE) -C .. app-start

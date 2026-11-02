@@ -9,7 +9,6 @@ import { API_BASE_URL, ApiError } from '../api/client';
 import { STOCK_REASON_AUTO_SALE_REPLENISHMENT } from '../constants';
 import { errorMessage, mutationErrorMessage, readErrorMessage, uncertainMutation } from '../formatters';
 import { useOnlineList } from './useOnlineList';
-import { removeLegacyTask } from './legacyTaskCleanup';
 import { useI18n } from '../i18n';
 import { Cart, CartLine, PaymentMethod, Product, ProductForm, Sale, SetProductForm, StockHistoryEntry, Tab } from '../types';
 
@@ -24,21 +23,6 @@ const emptyProductForm: ProductForm = {
 
 export function useAppState() {
   const { t } = useI18n();
-  const legacyCleanupPending = useRef(false);
-  const [legacyTaskCleanupFailed, setLegacyTaskCleanupFailed] = useState(false);
-  const retryLegacyTaskCleanup = useCallback(async () => {
-    if (legacyCleanupPending.current) return;
-    legacyCleanupPending.current = true;
-    try {
-      await removeLegacyTask();
-      setLegacyTaskCleanupFailed(false);
-    } catch {
-      setLegacyTaskCleanupFailed(true);
-    } finally {
-      legacyCleanupPending.current = false;
-    }
-  }, []);
-  useEffect(() => { void retryLegacyTaskCleanup(); }, [retryLegacyTaskCleanup]);
   const scanAccepted = useRef(true);
   const productWritePending = useRef(false);
   const [savingProduct, setSavingProduct] = useState(false);
@@ -637,8 +621,6 @@ export function useAppState() {
   };
 
   return {
-    legacyTaskCleanupFailed,
-    retryLegacyTaskCleanup,
     tab,
     setTab,
     products,

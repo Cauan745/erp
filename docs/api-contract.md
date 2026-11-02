@@ -1,6 +1,6 @@
 # Online-first API contract
 
-This is the target contract for `/api/v1`. Backend implementation status is recorded separately in [implementation progress](implementation-progress.md). JSON uses camelCase, UUID strings, UTC ISO-8601 timestamps, and integer cents. Never serialize JPA entities. Empty collections return `[]`. Authentication, synchronization, pagination, and offline writes are outside this MVP.
+This is the implemented contract for `/api/v1`. Acceptance and verification results are recorded in the [README](../README.md#verification-status). JSON uses camelCase, UUID strings, UTC ISO-8601 timestamps, and integer cents. Never serialize JPA entities. Empty collections return `[]`. Authentication, synchronization, pagination, and offline writes are outside this MVP.
 
 ## Values and normalization
 
