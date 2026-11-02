@@ -11,12 +11,13 @@ type CartModalProps = {
   visible: boolean;
   lines: CartLine[];
   total: number;
+  locked: boolean;
   onClose: () => void;
   onUpdateQuantity: (line: CartLine, delta: number) => void;
   onCheckout: () => void;
 };
 
-export function CartModal({ visible, lines, total, onClose, onUpdateQuantity, onCheckout }: CartModalProps) {
+export function CartModal({ visible, lines, total, locked, onClose, onUpdateQuantity, onCheckout }: CartModalProps) {
   const insets = useSafeAreaInsets();
   const { locale, t } = useI18n();
 
@@ -40,9 +41,9 @@ export function CartModal({ visible, lines, total, onClose, onUpdateQuantity, on
                 <Text style={styles.muted}>{money(line.unitPrice, locale)} {t('cart.each')}</Text>
               </View>
               <View style={styles.quantity}>
-                <Pressable onPress={() => onUpdateQuantity(line, -1)}><Text style={styles.quantityButton}>−</Text></Pressable>
+                <Pressable disabled={locked} onPress={() => onUpdateQuantity(line, -1)}><Text style={styles.quantityButton}>−</Text></Pressable>
                 <Text style={styles.quantityText}>{line.quantity}</Text>
-                <Pressable onPress={() => onUpdateQuantity(line, 1)}><Text style={styles.quantityButton}>＋</Text></Pressable>
+                <Pressable disabled={locked} onPress={() => onUpdateQuantity(line, 1)}><Text style={styles.quantityButton}>＋</Text></Pressable>
               </View>
               <Text style={styles.lineTotal}>{money(line.lineTotal, locale)}</Text>
             </View>
@@ -54,7 +55,7 @@ export function CartModal({ visible, lines, total, onClose, onUpdateQuantity, on
                 <Text style={styles.totalLabel}>{t('common.total')}</Text>
                 <Text style={styles.totalValue}>{money(total, locale)}</Text>
               </View>
-              <Pressable style={[styles.primaryButton, { opacity: 0.4 }]} disabled accessibilityState={{ disabled: true }} onPress={onCheckout}>
+              <Pressable style={[styles.primaryButton, locked && styles.buttonDisabled]} disabled={locked} accessibilityState={{ disabled: locked }} onPress={onCheckout}>
                 <Text style={styles.primaryButtonText}>{t('cart.checkout')}</Text>
               </Pressable>
             </>

@@ -6,16 +6,18 @@ import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyb
 import { money, parseMoneyToCents } from '../../formatters';
 import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
-import { PaymentMethod } from '../../db/sale/types';
+import { PaymentMethod } from '../../types';
 
 type CheckoutModalProps = {
   visible: boolean;
-  total: number;
+  totalCents: number;
+  saving: boolean;
+  blocked: boolean;
   onClose: () => void;
   onConfirm: (paymentMethod: PaymentMethod, cashReceivedCents: number | null) => void;
 };
 
-export function CheckoutModal({ visible, total, onClose, onConfirm }: CheckoutModalProps) {
+export function CheckoutModal({ visible, totalCents, saving, blocked, onClose, onConfirm }: CheckoutModalProps) {
   const insets = useSafeAreaInsets();
   const { locale, t } = useI18n();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
@@ -24,11 +26,11 @@ export function CheckoutModal({ visible, total, onClose, onConfirm }: CheckoutMo
   useEffect(() => {
     if (visible) {
       setPaymentMethod('cash');
-      setCashAmount((total).toFixed(2).replace('.', ','));
+      setCashAmount(`${Math.floor(totalCents / 100)}${locale === 'pt-BR' ? ',' : '.'}${String(totalCents % 100).padStart(2, '0')}`);
     }
-  }, [visible, total]);
+  }, [visible]);
 
-  const totalCents = Math.round(total * 100);
+  const total = totalCents / 100;
   const cashReceivedCents = paymentMethod === 'cash' ? parseMoneyToCents(cashAmount, locale) : null;
   const cashAmountValid = paymentMethod !== 'cash'
     || (cashReceivedCents !== null && cashReceivedCents >= totalCents);
@@ -67,6 +69,7 @@ export function CheckoutModal({ visible, total, onClose, onConfirm }: CheckoutMo
               <Pressable
                 key={option.key}
                 style={[styles.paymentOption, paymentMethod === option.key && styles.paymentOptionSelected]}
+                disabled={saving || blocked}
                 onPress={() => setPaymentMethod(option.key)}
               >
                 <Text style={[styles.paymentOptionText, paymentMethod === option.key && styles.paymentOptionTextSelected]}>
@@ -80,6 +83,7 @@ export function CheckoutModal({ visible, total, onClose, onConfirm }: CheckoutMo
               <Text style={styles.fieldLabel}>{t('checkout.cashReceived')}</Text>
               <TextInput
                 style={styles.input}
+                editable={!saving && !blocked}
                 value={cashAmount}
                 onChangeText={setCashAmount}
                 keyboardType="decimal-pad"
@@ -96,13 +100,13 @@ export function CheckoutModal({ visible, total, onClose, onConfirm }: CheckoutMo
             </>
           ) : null}
           <Pressable
-            style={[styles.primaryButton, !cashAmountValid && styles.buttonDisabled]}
-            disabled={!cashAmountValid}
+            style={[styles.primaryButton, (!cashAmountValid || saving || blocked) && styles.buttonDisabled]}
+            disabled={!cashAmountValid || saving || blocked}
             onPress={() => onConfirm(paymentMethod, cashReceivedCents)}
           >
-            <Text style={styles.primaryButtonText}>{t('checkout.confirmPayment')}</Text>
+            <Text style={styles.primaryButtonText}>{t(saving ? 'products.saving' : 'checkout.confirmPayment')}</Text>
           </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={onClose}>
+          <Pressable disabled={saving} style={styles.secondaryButton} onPress={onClose}>
             <Text style={styles.secondaryButtonText}>{t('checkout.backToCart')}</Text>
           </Pressable>
             </View>

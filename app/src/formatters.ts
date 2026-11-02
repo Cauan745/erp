@@ -15,11 +15,11 @@ export function parseMoneyToCents(value: string, locale: Locale = 'pt-BR'): numb
   const normalized = locale === 'pt-BR' && trimmed.includes(',')
     ? trimmed.replace(/\./g, '').replace(',', '.')
     : trimmed.replace(/,/g, '');
-  const parsed = Number(normalized);
-  if (!Number.isFinite(parsed) || parsed < 0) return null;
-
-  const cents = Math.round(parsed * 100);
-  return Number.isSafeInteger(cents) ? cents : null;
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized)) return null;
+  const [whole, fraction = ''] = normalized.split('.');
+  const cents = BigInt(whole || '0') * 100n + BigInt((fraction + '00').slice(0, 2))
+    + (fraction.length > 2 && fraction[2] >= '5' ? 1n : 0n);
+  return cents <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(cents) : null;
 }
 
 export const shortDate = (value: string, locale: Locale = 'pt-BR') =>
@@ -62,7 +62,8 @@ export const errorMessage = (error: unknown, t: Translator) => {
       product_name_taken: 'errors.productNameDuplicate', barcode_taken: 'errors.productBarcodeDuplicate',
       adjustment_missing: 'errors.stockAdjustmentMissing', numeric_overflow: 'errors.numericOverflow',
       request_id_reused: 'errors.requestIdReused', product_missing: 'errors.productMissing', validation_failed: 'errors.validationFailed',
-      inventory_busy: 'errors.inventoryBusy', internal_error: 'errors.apiFailure'
+      cash_received_invalid: 'errors.cashReceivedInvalid', insufficient_stock: 'alerts.notEnoughStockTitle',
+      total_changed: 'checkout.priceChanged', inventory_busy: 'errors.inventoryBusy', internal_error: 'errors.apiFailure'
     };
     return t(keys[error.code] ?? 'errors.apiFailure');
   }

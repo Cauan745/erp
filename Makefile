@@ -19,6 +19,7 @@ app-typecheck:
 app-test:
 	node app/tests/product-api.test.cjs
 	node app/tests/stock-api.test.cjs
+	node app/tests/sale-api.test.cjs
 app-config:
 	cd app && npx --no-install expo config --type public
 backend-run:

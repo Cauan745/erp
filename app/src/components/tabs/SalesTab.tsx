@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useState } from 'react';
 
-import { PaymentMethod, Sale } from '../../db/sale/types';
+import { PaymentMethod, Sale } from '../../types';
 import { money, shortDate } from '../../formatters';
 import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
@@ -49,7 +49,7 @@ function dayLabel(value: string, locale: Parameters<Intl.DateTimeFormatConstruct
   }).format(new Date(value));
 }
 
-export function SalesTab({ sales }: { sales: Sale[] }) {
+export function SalesTab({ sales, error, onRetry }: { sales: Sale[]; error: string | null; onRetry: () => void }) {
   const { locale, t } = useI18n();
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const todayKey = dayKey(new Date());
@@ -74,7 +74,7 @@ export function SalesTab({ sales }: { sales: Sale[] }) {
         <Text style={styles.saleTitle}>{t('common.itemCount', { count: sale.lines.reduce((sum, line) => sum + line.quantity, 0) })}</Text>
         <Text style={styles.muted}>{shortDate(sale.createdAt, locale)} · {t(paymentLabels[sale.paymentMethod])}</Text>
         {sale.paymentMethod === 'cash' ? (
-          <Text style={styles.muted}>{t('sales.change')}: {money(Math.max(0, (sale.cashReceived ?? sale.total) - sale.total), locale)}</Text>
+          <Text style={styles.muted}>{t('sales.change')}: {money(sale.change ?? 0, locale)}</Text>
         ) : null}
       </View>
       <Text style={styles.saleTotal}>{money(sale.total, locale)}</Text>
@@ -84,6 +84,7 @@ export function SalesTab({ sales }: { sales: Sale[] }) {
   return (
     <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
       <Text style={styles.sectionKicker}>{t('sales.history')}</Text>
+      {error ? <Pressable onPress={onRetry}><Text style={styles.errorText}>{error} · {t('startup.retry')}</Text></Pressable> : null}
       <Text style={styles.sectionTitle}>{t('sales.todaySales')}</Text>
       <View style={styles.statsRow}>
         <Stat label={t('sales.todaySales')} value={`${todaySales.length}`} />

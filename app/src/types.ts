@@ -1,8 +1,8 @@
 import type React from 'react';
-import { SaleLine } from './db/sale/types';
 
 export type Tab = 'sell' | 'products' | 'sales';
 export type CartLine = SaleLine & {
+  unitPriceCents: number;
   allowInsufficientStock?: boolean;
 };
 export type Cart = Record<string, CartLine>;
@@ -26,4 +26,13 @@ export type StockHistoryEntry = {
   reason: string | null;
   source: 'sale' | 'adjustment';
   createdAt: string;
+};
+
+export type SaleLine = {
+  productId: string; name: string; quantity: number; unitPrice: number; lineTotal: number;
+};
+export type PaymentMethod = 'cash' | 'debit_card' | 'credit_card' | 'pix';
+export type Sale = {
+  id: string; requestId: string; lines: SaleLine[]; total: number;
+  paymentMethod: PaymentMethod; cashReceived: number | null; change: number | null; createdAt: string;
 };

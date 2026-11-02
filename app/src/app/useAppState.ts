@@ -2,11 +2,12 @@ import { Alert } from 'react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { createProduct, deleteProduct, findProductByBarcode, listProducts, updateProduct, Product } from '../repositories';
-import { PaymentMethod, Sale } from '../db/sale/types';
+import { PaymentMethod, Sale } from '../types';
+import { checkout, checkoutInput, listSales, lookupSale, priceReview, stockShortages } from '../repositories/sale';
 import { StockHistoryEntry } from '../types';
 import { adjustStock, listStockHistory, lookupAdjustment, updateStockReason } from '../repositories/stock';
 import { clearRecoveryMarker, listRecoveryMarkers, RecoveryMarker } from '../api/requestRecovery';
-import { ApiError } from '../api/client';
+import { API_BASE_URL, ApiError } from '../api/client';
 import { STOCK_REASON_AUTO_SALE_REPLENISHMENT } from '../constants';
 import { errorMessage } from '../formatters';
 import { useI18n } from '../i18n';
@@ -32,7 +33,14 @@ export function useAppState() {
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<Tab>('sell');
   const [products, setProducts] = useState<Product[]>([]);
-  const sales: Sale[] = [];
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [salesError, setSalesError] = useState<string | null>(null);
+  const salesRevision = useRef(0);
+  const salesPending = useRef<Promise<void> | null>(null);
+  const checkoutWritePending = useRef(false);
+  const [savingCheckout, setSavingCheckout] = useState(false);
+  const [confirmedSale, setConfirmedSale] = useState<Sale | null>(null);
+  const uncertainCheckout = useRef(false);
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const historyRevision = useRef(0);
@@ -101,17 +109,33 @@ export function useAppState() {
     historyPending.current = request;
     return request;
   }, [t]);
+  const refreshSales = useCallback(() => {
+    if (salesPending.current) return salesPending.current;
+    const revision = salesRevision.current;
+    const request = (async () => {
+      try {
+        const rows = await listSales();
+        if (revision === salesRevision.current) setSales(rows);
+        setSalesError(null);
+      } catch (error) { setSalesError(errorMessage(error, t)); throw error; }
+      finally { salesPending.current = null; }
+    })();
+    salesPending.current = request;
+    return request;
+  }, [t]);
   const loadRecovery = useCallback(async () => {
     try { setMarkers(await listRecoveryMarkers()); setRecoveryError(null); }
     catch (error) { setRecoveryError(errorMessage(error, t)); }
   }, [t]);
   useEffect(() => {
     void refreshHistory().catch(() => undefined);
+    void refreshSales().catch(() => undefined);
     void loadRecovery();
-  }, [refreshHistory, loadRecovery]);
+  }, [refreshHistory, refreshSales, loadRecovery]);
 
   const cartLines = Object.values(cart);
-  const cartTotal = cartLines.reduce((sum, line) => sum + line.lineTotal, 0);
+  const cartTotalCents = cartLines.reduce((sum, line) => sum + line.unitPriceCents * line.quantity, 0);
+  const cartTotal = cartTotalCents / 100;
   const cartQuantity = cartLines.reduce((sum, line) => sum + line.quantity, 0);
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -143,6 +167,7 @@ export function useAppState() {
   };
 
   const addProductToCart = (product: Product, allowInsufficientStock = false) => {
+    if (checkoutWritePending.current || uncertainCheckout.current) return;
     setCart((current) => {
       const existing = current[product.id];
       const quantity = (existing?.quantity ?? 0) + 1;
@@ -153,7 +178,8 @@ export function useAppState() {
           name: product.name,
           quantity,
           unitPrice: product.sellingPrice,
-          lineTotal: quantity * product.sellingPrice,
+          unitPriceCents: product.sellingPriceCents,
+          lineTotal: quantity * product.sellingPriceCents / 100,
           allowInsufficientStock: existing?.allowInsufficientStock || allowInsufficientStock
         }
       };
@@ -161,7 +187,6 @@ export function useAppState() {
     showNotice(t('alerts.productAdded', { productName: product.name }));
   };
 
-  const unavailable = () => Alert.alert(t('transition.title'), t('transition.writesUnavailable'));
   const addStock = async (productId: string, quantity: number) => {
     if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 2147483647) {
       Alert.alert(t('alerts.addStockFailedTitle'), t('errors.stockQuantityPositive')); return false;
@@ -173,6 +198,7 @@ export function useAppState() {
   };
 
   const addToCart = (product: Product) => {
+    if (checkoutWritePending.current || uncertainCheckout.current) return;
     const existing = cart[product.id];
     const requested = (existing?.quantity ?? 0) + 1;
     const shortage = requested - product.stock;
@@ -204,6 +230,7 @@ export function useAppState() {
   };
 
   const updateQuantity = (line: CartLine, delta: number) => {
+    if (checkoutWritePending.current || uncertainCheckout.current) return;
     if (delta > 0) {
       const product = products.find((item) => item.id === line.productId);
       const requested = line.quantity + delta;
@@ -215,7 +242,7 @@ export function useAppState() {
           [line.productId]: {
             ...line,
             quantity: requested,
-            lineTotal: requested * line.unitPrice
+            lineTotal: requested * line.unitPriceCents / 100
           }
         }));
         return;
@@ -244,7 +271,7 @@ export function useAppState() {
                     [line.productId]: {
                       ...currentLine,
                       quantity: currentLine.quantity + delta,
-                      lineTotal: (currentLine.quantity + delta) * currentLine.unitPrice
+                      lineTotal: (currentLine.quantity + delta) * currentLine.unitPriceCents / 100
                     }
                   };
                 });
@@ -260,7 +287,7 @@ export function useAppState() {
                 [line.productId]: {
                   ...line,
                   quantity: requested,
-                  lineTotal: requested * line.unitPrice,
+                  lineTotal: requested * line.unitPriceCents / 100,
                   allowInsufficientStock: true
                 }
               }));
@@ -280,7 +307,7 @@ export function useAppState() {
       }
       return {
         ...current,
-        [line.productId]: { ...line, quantity, lineTotal: quantity * line.unitPrice }
+        [line.productId]: { ...line, quantity, lineTotal: quantity * line.unitPriceCents / 100 }
       };
     });
   };
@@ -443,8 +470,8 @@ export function useAppState() {
     if (results[1].status === 'rejected') Alert.alert(t('stock.refreshFailed'), errorMessage(results[1].reason, t));
   };
 
-  const submitStockChange = async (productId: string, quantity: number, reason: string): Promise<boolean> => {
-    if (stockWritePending.current || recoveryPending.current) return false;
+  const submitStockChange = async (productId: string, quantity: number, reason: string, forCheckout = false): Promise<boolean> => {
+    if (stockWritePending.current || recoveryPending.current || (checkoutWritePending.current && !forCheckout)) return false;
     stockWritePending.current = true;
     setSavingStock(true);
     try {
@@ -479,7 +506,7 @@ export function useAppState() {
     if (await submitStockChange(stockAdjustmentProductId, quantity, reason)) setStockAdjustmentProductId(null);
   };
   const saveStockReason = async (reason: string) => {
-    if (stockWritePending.current || recoveryPending.current || !stockReasonEditEntry || stockReasonEditEntry.source !== 'adjustment') return;
+    if (stockWritePending.current || recoveryPending.current || checkoutWritePending.current || !stockReasonEditEntry || stockReasonEditEntry.source !== 'adjustment') return;
     stockWritePending.current = true;
     setSavingStock(true);
     try {
@@ -494,11 +521,24 @@ export function useAppState() {
     finally { stockWritePending.current = false; setSavingStock(false); }
   };
   const checkPreviousRequest = async (marker: RecoveryMarker) => {
-    if (recoveryPending.current || stockWritePending.current) return;
+    if (recoveryPending.current || stockWritePending.current || checkoutWritePending.current) return;
     recoveryPending.current = true;
     setCheckingRecovery(true);
     try {
-      if (marker.operationType !== 'adjustment') { Alert.alert(t('recovery.title'), t('recovery.checkoutPending')); return; }
+      if (marker.operationType === 'checkout') {
+        const saved = await lookupSale(marker);
+        if (marker.apiBaseUrl === API_BASE_URL) {
+          rememberSale(saved);
+          if (uncertainCheckout.current) {
+            setCart({}); setCartOpen(false); setCheckoutOpen(false); uncertainCheckout.current = false;
+          }
+        }
+        setConfirmedSale(saved);
+        Alert.alert(t('recovery.saleConfirmed'), t('recovery.saleResult', { backend: marker.apiBaseUrl, id: saved.id }));
+        await clearRecoveryMarker(marker).catch(error => Alert.alert(t('recovery.title'), errorMessage(error, t)));
+        await refreshSaleAfterWrite();
+        return;
+      }
       const saved = await lookupAdjustment(marker);
       catalogRevision.current += 1;
       historyRevision.current += 1;
@@ -517,22 +557,99 @@ export function useAppState() {
     } finally { await loadRecovery(); recoveryPending.current = false; setCheckingRecovery(false); }
   };
   const reconcilePreviousRequest = (marker: RecoveryMarker) => {
-    if (recoveryPending.current || stockWritePending.current) return;
+    if (recoveryPending.current || stockWritePending.current || checkoutWritePending.current) return;
     Alert.alert(t('recovery.reconcile'), t('recovery.reconcileMessage', { backend: marker.apiBaseUrl }), [
       { text: t('common.cancel'), style: 'cancel' },
       { text: t('recovery.dismiss'), onPress: () => {
-        if (recoveryPending.current || stockWritePending.current) return;
+        if (recoveryPending.current || stockWritePending.current || checkoutWritePending.current) return;
         recoveryPending.current = true;
         setCheckingRecovery(true);
         void (async () => {
-          try { await clearRecoveryMarker(marker); }
+          try {
+            await clearRecoveryMarker(marker);
+            if (marker.operationType === 'checkout' && marker.apiBaseUrl === API_BASE_URL) uncertainCheckout.current = false;
+          }
           catch (error) { Alert.alert(t('recovery.title'), errorMessage(error, t)); }
           finally { await loadRecovery(); recoveryPending.current = false; setCheckingRecovery(false); }
         })();
       } }
     ]);
   };
-  const completeCheckout = async (_method: PaymentMethod, _cash: number | null): Promise<void> => { unavailable(); };
+  const rememberSale = (saved: Sale) => {
+    salesRevision.current += 1;
+    catalogRevision.current += 1;
+    historyRevision.current += 1;
+    setSales(rows => [saved, ...rows.filter(row => row.id !== saved.id)]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)));
+  };
+  const refreshSaleAfterWrite = async () => {
+    await salesPending.current?.catch(() => undefined);
+    const results = await Promise.allSettled([refreshStockAfterWrite(), refreshSales()]);
+    if (results[1].status === 'rejected') Alert.alert(t('sales.refreshFailed'), errorMessage(results[1].reason, t));
+  };
+  const completeCheckout = async (method: PaymentMethod, cash: number | null): Promise<void> => {
+    if (checkoutWritePending.current || stockWritePending.current || recoveryPending.current) return;
+    checkoutWritePending.current = true;
+    setSavingCheckout(true);
+    let lines = cartLines.map(line => ({ ...line }));
+    try {
+      while (true) {
+        if ((await listRecoveryMarkers()).length) {
+          Alert.alert(t('recovery.title'), t('recovery.unresolved')); return;
+        }
+        const input = checkoutInput(lines, method, cash);
+        try {
+          const saved = await checkout(input);
+          rememberSale(saved);
+          setCart({}); uncertainCheckout.current = false;
+          setCheckoutOpen(false); setCartOpen(false);
+          setConfirmedSale(saved);
+          showNotice(t('alerts.saleSaved'));
+          await refreshSaleAfterWrite();
+          return;
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 409 && error.code === 'total_changed') {
+            const review = priceReview(error, input);
+            setCart(current => Object.fromEntries(Object.entries(current).map(([id, line]) => {
+              const price = review.items.find(item => item.productId === id);
+              return [id, price ? { ...line, name: price.productName, unitPrice: price.unitPriceCents / 100, unitPriceCents: price.unitPriceCents,
+                lineTotal: price.lineTotalCents / 100 } : line];
+            })));
+            Alert.alert(t('checkout.priceChangedTitle'), t('checkout.priceChanged'));
+            return;
+          }
+          if (!(error instanceof ApiError) || error.status !== 409 || error.code !== 'insufficient_stock') throw error;
+          const shortage = stockShortages(error, input)[0];
+          const choice = await new Promise<'cancel' | 'stock' | 'override'>(resolve => Alert.alert(
+            t('alerts.notEnoughStockTitle'), t('alerts.notEnoughStockMessage', {
+              productName: shortage.productName, available: shortage.available, requested: shortage.requested
+            }), [
+              { text: t('common.cancel'), style: 'cancel', onPress: () => resolve('cancel') },
+              { text: t('alerts.addStockForSale', { quantity: shortage.requested - shortage.available }), onPress: () => resolve('stock') },
+              { text: t('sell.sellAnyway'), onPress: () => resolve('override') }
+            ], { cancelable: false }));
+          if (choice === 'cancel') return;
+          if (choice === 'stock') {
+            const amount = shortage.requested - shortage.available;
+            if (amount > 2147483647) { Alert.alert(t('alerts.addStockFailedTitle'), t('errors.numericOverflow')); return; }
+            if (!(await submitStockChange(shortage.productId, amount, STOCK_REASON_AUTO_SALE_REPLENISHMENT, true))) return;
+          } else {
+            lines = lines.map(line => line.productId === shortage.productId ? { ...line, allowInsufficientStock: true } : line);
+            setCart(Object.fromEntries(lines.map(line => [line.productId, line])));
+          }
+          // A definitive rollback and the user's choice authorize a revised request with a new ID.
+        }
+      }
+    } catch (error) {
+      const outstanding = await listRecoveryMarkers().catch(() => null);
+      uncertainCheckout.current = Boolean(outstanding?.some(m => m.operationType === 'checkout' && m.apiBaseUrl === API_BASE_URL));
+      Alert.alert(t(outstanding?.length ? 'recovery.uncertain' : 'alerts.completeSaleFailedTitle'), errorMessage(error, t)
+        + (outstanding?.length ? `\n\n${t('recovery.unresolved')}` : ''));
+    } finally {
+      await loadRecovery();
+      checkoutWritePending.current = false; setSavingCheckout(false);
+    }
+  };
 
   const retry = () => {
     setLoading(true);
@@ -546,6 +663,12 @@ export function useAppState() {
     products,
     categories,
     sales,
+    salesError,
+    retrySales: () => { void refreshSales().catch(() => undefined); },
+    savingCheckout,
+    cartLocked: savingCheckout || uncertainCheckout.current,
+    confirmedSale,
+    closeConfirmedSale: () => setConfirmedSale(null),
     stockHistory,
     productForm,
     editingProductId,
@@ -569,14 +692,15 @@ export function useAppState() {
     setProductSearch,
     cartLines,
     cartTotal,
+    cartTotalCents,
     cartQuantity,
     notice,
     scannerOpen,
     cartOpen,
     checkoutOpen,
     closeScanner: () => { scanAccepted.current = true; setScannerOpen(false); },
-    setCartOpen,
-    setCheckoutOpen,
+    setCartOpen: (open: boolean) => { if (!checkoutWritePending.current) setCartOpen(open); },
+    setCheckoutOpen: (open: boolean) => { if (!checkoutWritePending.current && (!open || !uncertainCheckout.current)) setCheckoutOpen(open); },
     stockAdjustmentProduct,
     stockAdjustmentOpen: Boolean(stockAdjustmentProductId),
     openStockAdjustment: (id: string) => { if (!stockWritePending.current) setStockAdjustmentProductId(id); },
@@ -607,6 +731,7 @@ export function useAppState() {
     refresh: () => {
       void refresh().catch((error) => Alert.alert(t('alerts.catalogRefreshFailedTitle'), errorMessage(error, t)));
       void refreshHistory().catch(() => undefined);
+      void refreshSales().catch(() => undefined);
       void loadRecovery();
     }
   };

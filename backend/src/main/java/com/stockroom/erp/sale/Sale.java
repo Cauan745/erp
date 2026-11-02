@@ -39,7 +39,7 @@ public class Sale {
         this.cashReceivedCents = cashReceivedCents;
         this.requestId = requestId;
         this.requestFingerprint = requestFingerprint;
-        this.createdAt = Instant.now();
+        this.createdAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
     }
 
     public UUID getId() { return id; }

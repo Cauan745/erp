@@ -1,7 +1,7 @@
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { PaymentMethod, Sale } from '../../db/sale/types';
+import { PaymentMethod, Sale } from '../../types';
 import { money, shortDate } from '../../formatters';
 import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
@@ -56,7 +56,7 @@ export function SaleDetailsModal({ sale, onClose }: SaleDetailsModalProps) {
                     </View>
                     <View style={styles.saleDetailRow}>
                       <Text style={styles.saleDetailLabel}>{t('sales.change')}</Text>
-                      <Text style={styles.saleDetailValue}>{money(Math.max(0, (sale.cashReceived ?? sale.total) - sale.total), locale)}</Text>
+                      <Text style={styles.saleDetailValue}>{money(sale.change ?? 0, locale)}</Text>
                     </View>
                   </>
                 ) : null}

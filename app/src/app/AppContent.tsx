@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AppHeader } from '../components/AppHeader';
 import { StartupScreen } from '../components/StartupScreen';
+import { SaleDetailsModal } from '../components/modals/SaleDetailsModal';
 import { CartModal } from '../components/modals/CartModal';
 import { CheckoutModal } from '../components/modals/CheckoutModal';
 import { ScannerModal } from '../components/modals/ScannerModal';
@@ -43,7 +44,6 @@ export function AppContent() {
       <StatusBar style="light" />
       <View style={styles.container}>
         <AppHeader onRefresh={app.refresh} refreshing={app.refreshing} />
-        <Text style={styles.muted}>{t('transition.writesUnavailable')}</Text>
 
         {app.recoveryError ? <Pressable onPress={() => { void app.loadRecovery(); }}>
           <Text style={styles.muted}>{app.recoveryError} · {t('startup.retry')}</Text>
@@ -52,10 +52,10 @@ export function AppContent() {
           <Text style={styles.listTitle}>{t('recovery.title')}</Text>
           {app.markers.map(marker => <View key={`${marker.apiBaseUrl}-${marker.operationType}-${marker.requestId}`}>
             <Text style={styles.muted}>{marker.apiBaseUrl} · {marker.requestId}</Text>
-            <Pressable disabled={app.checkingRecovery || app.savingStock} onPress={() => { void app.checkPreviousRequest(marker); }}>
+            <Pressable disabled={app.checkingRecovery || app.savingStock || app.savingCheckout} onPress={() => { void app.checkPreviousRequest(marker); }}>
               <Text style={styles.closeText}>{t(app.checkingRecovery ? 'recovery.checking' : 'recovery.check')}</Text>
             </Pressable>
-            <Pressable disabled={app.checkingRecovery || app.savingStock} onPress={() => app.reconcilePreviousRequest(marker)}>
+            <Pressable disabled={app.checkingRecovery || app.savingStock || app.savingCheckout} onPress={() => app.reconcilePreviousRequest(marker)}>
               <Text style={styles.muted}>{t('recovery.reconcile')}</Text>
             </Pressable>
           </View>)}
@@ -88,7 +88,7 @@ export function AppContent() {
             onRetryHistory={app.retryHistory}
           />
         )}
-        {app.tab === 'sales' && <SalesTab sales={app.sales} />}
+        {app.tab === 'sales' && <SalesTab sales={app.sales} error={app.salesError} onRetry={app.retrySales} />}
 
         <TabBar activeTab={app.tab} bottomInset={insets.bottom} onChange={app.setTab} />
       </View>
@@ -105,6 +105,7 @@ export function AppContent() {
       />
       <CartModal
         visible={app.cartOpen}
+        locked={app.cartLocked}
         lines={app.cartLines}
         total={app.cartTotal}
         onClose={() => app.setCartOpen(false)}
@@ -113,10 +114,13 @@ export function AppContent() {
       />
       <CheckoutModal
         visible={app.checkoutOpen}
-        total={app.cartTotal}
+        totalCents={app.cartTotalCents}
+        saving={app.savingCheckout}
+        blocked={app.cartLocked && !app.savingCheckout}
         onClose={() => app.setCheckoutOpen(false)}
         onConfirm={app.completeCheckout}
       />
+      <SaleDetailsModal sale={app.confirmedSale} onClose={app.closeConfirmedSale} />
       <StockUpdateModal
         visible={app.stockAdjustmentOpen}
         saving={app.savingStock}

@@ -23,7 +23,7 @@ Spring Boot manages Hibernate and Flyway dependency versions. [Spring system req
 
 ## Current status
 
-Steps 1–3 are implemented. Android startup and product CRUD are user-verified. Step 4 adds signed stock adjustments, combined inventory history, reason-only edits, and request recovery. Adjustments use PostgreSQL transactions and shared product locks. The app persists only unresolved request markers, never business data or request bodies. Checkout remains disabled until step 5, and sales lists remain empty. The combined history query already supports saved sale items. SQLite/sync files and their native plugins remain isolated until step 7. No historical database or device data is imported. The user accepted proceeding after partial step 4 device testing; individual checklist coverage remains unconfirmed. See [implementation progress](docs/implementation-progress.md) for the code handoff and automated results.
+Steps 1–5 are implemented. Checkout and sales history now use the API, including payment validation, explicit shortage overrides, price review, saved item snapshots, and request recovery. PostgreSQL transactions and shared product locks protect inventory writes. The app persists only unresolved request markers, never business data or request bodies. Android startup and product CRUD are user-verified. Step 4 received partial device testing and user acceptance; individual untested flows remain unverified. The user completed step 5 device testing and reported that everything works as expected. SQLite/sync files and their native plugins remain isolated until step 7. No historical database or device data is imported. See [implementation progress](docs/implementation-progress.md) for the code handoff and automated results.
 
 ## Development
 
@@ -68,7 +68,7 @@ make backend-integration-test
 
 Start the development database with `make db-up`, the API with `make backend-run`, and Metro with the device's reachable `EXPO_PUBLIC_API_URL` and `make app-start`. Open the existing native development build. These commands do not build Android.
 
-Create a product with opening stock, restart the app, find it by barcode, edit its metadata, and hide it. Confirm category suggestions, form scrolling with the keyboard, and scanner permissions. Scan once and confirm repeated camera callbacks add only one cart item. An unknown barcode should offer registration; a disconnected API should show a lookup error. A failed product save must keep the form, and a failed refresh must retain the catalog. The refresh button lets you check uncertain product-write outcomes without automatically resubmitting them. Step 4 now enables stock adjustment controls. Checkout remains disabled.
+Create a product with opening stock, restart the app, find it by barcode, edit its metadata, and hide it. Confirm category suggestions, form scrolling with the keyboard, and scanner permissions. Scan once and confirm repeated camera callbacks add only one cart item. An unknown barcode should offer registration; a disconnected API should show a lookup error. A failed product save must keep the form, and a failed refresh must retain the catalog. The refresh button lets you check uncertain product-write outcomes without automatically resubmitting them. Stock adjustments and checkout are now enabled through the API.
 
 Device verification is required before committing the step 3 UI changes or posting issue updates. Automated results and the code handoff are in [implementation progress](docs/implementation-progress.md).
 
@@ -90,10 +90,26 @@ With a native build containing AsyncStorage, start the API and Metro as above. V
 
 - Create a product with stock 10. Its opening balance must not appear in history. Apply +2, then -3, and confirm stock 9 with exactly two history rows. Restart and confirm the saved stock and history reload.
 - Edit an adjustment's reason, including clearing it. Confirm stock, quantity, and original timestamp stay unchanged. Hide the product and confirm its adjustment history remains editable.
-- From a cart shortage, choose to add stock. Confirm the adjustment is saved with the translated automatic reason. Open its reason editor and save without changing the displayed value. The database must retain `sale-shortage-replenishment`. Checkout must remain disabled.
+- From a cart shortage, choose to add stock. Confirm the adjustment is saved with the translated automatic reason. Open its reason editor and save without changing the displayed value. The database must retain `sale-shortage-replenishment`. Checkout now uses the API as described below.
 - Disconnect before saving an adjustment. The form must retain its values. An uncertain submission leaves a reminder and blocks another adjustment until lookup confirms it or you reconcile it manually. Restart and use "Verificar solicitação anterior". Repeated lookup must never send another POST. A `request_not_found` response keeps the reminder.
 - If the configured API URL changes, the reminder must still show and query its recorded backend. Confirmation displays the saved adjustment. The catalog/history refresh uses the currently configured backend. Reconcile only after checking the original server's stock and history. Dismissing the reminder does not cancel an in-flight request.
 - Disconnect during history refresh. Keep the catalog and previous history visible, with a history retry action. After a confirmed adjustment or reason edit, a failed refresh must say the change was saved and must not invite resubmission as a failed write.
 - Check keyboard scrolling, Android back handling, and repeated save taps in both stock modals. Saving disables editing and dismissal while the request is in flight.
 
 The backend tests cover concurrency and rollback separately on PostgreSQL. Lost-response timing, native storage, keyboard behavior, and the complete phone recovery flow still need device verification. No commit or issue update should precede that verification.
+
+
+## Step 5 device verification
+
+Use the existing native development build containing AsyncStorage, then start PostgreSQL, the API, and Metro using the development instructions above. Step 5 adds no native dependency or plugin. The agent has not run an Android native build. The user completed device testing and reported that everything works as expected, then requested committing step 5. No issue update has been made. The checklist below remains available for regression checks.
+
+- Build and edit a cart using product buttons and the scanner. Confirm quantities and totals, keyboard scrolling, safe areas, and Android back behavior retain their existing presentation.
+- Complete separate sales with cash, debit card, credit card, and Pix. Cash must cover the total and show the correct change. Noncash must save no cash amount. Tap confirm repeatedly and attempt to go back while saving. Only one sale should appear, with one stock decrement.
+- Open the sales tab and each sale's details. Check names, quantities, saved prices, line totals, payment, cash, and change. Edit or hide a sold product, restart the app/API, and confirm the historical sale retains its snapshots. The inventory history should show negative sale quantities with read-only reasons.
+- Change a cart product's price on the server before confirming payment. The app must update the cart estimate, preserve the chosen payment and entered cash, and require another explicit confirmation. The first attempt must create no sale or stock change.
+- Reduce stock on the server after building a cart. Check cancel, adding stock, and selling anyway. With several shortages, each override must require explicit approval and earlier approvals must remain in the request. Adding stock commits a separate adjustment with the automatic internal reason. It remains saved if the later checkout fails or is cancelled.
+- Disconnect during checkout. The cart and payment inputs must stay visible. An uncertain checkout must leave a reminder, prevent replacement checkout requests, and preserve the submitted cart until lookup confirms it or you explicitly reconcile. A lookup miss must stay unresolved. After a restart, only the marker remains, with no stored cart or request body to replay.
+- Use the reminder to check the recorded backend. A committed result must open sale details and refresh lists. If the API URL changed, lookup must still use the original server and must not add its sale to the new server's sales list or clear an unrelated new cart. Dismissing after checking server history does not cancel a request in progress.
+- Fail a sales-list refresh and confirm the last fetched sales remain visible with a retry action. Fail a refresh after a confirmed checkout and confirm the app still shows the saved sale and does not report checkout failure.
+
+Automated tests cover PostgreSQL constraints, concurrency, rollback, and application recovery logic. Native storage persistence, modal rendering, the scanner, keyboard behavior, and phone network timing require device testing. The user has accepted step 5 after device testing. Commits and issue updates still require a request.

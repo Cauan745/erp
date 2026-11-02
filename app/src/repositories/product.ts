@@ -3,7 +3,7 @@ import { AppError } from '../errors';
 
 export type Product = {
   id: string; name: string; barcode: string; category: string;
-  cost: number | null; sellingPrice: number; profit: number | null; stock: number;
+  cost: number | null; sellingPrice: number; sellingPriceCents: number; profit: number | null; stock: number;
   createdAt: string; updatedAt: string;
 };
 export type ProductInput = {
@@ -26,7 +26,7 @@ function productFromResponse(value: unknown): Product {
   }
   return {
     id: p.id, name: p.name, barcode: p.barcode ?? '', category: p.category,
-    cost: p.costCents === null ? null : p.costCents / 100, sellingPrice: p.sellingPriceCents / 100,
+    cost: p.costCents === null ? null : p.costCents / 100, sellingPrice: p.sellingPriceCents / 100, sellingPriceCents: p.sellingPriceCents,
     profit: p.costCents === null ? null : (p.sellingPriceCents - p.costCents) / 100,
     stock: p.stock, createdAt: p.createdAt, updatedAt: p.updatedAt
   };

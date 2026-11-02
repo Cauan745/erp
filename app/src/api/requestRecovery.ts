@@ -61,7 +61,7 @@ export function isDefinitiveRejection(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false;
   return (error.status === 400 && error.code === 'validation_failed')
     || (error.status === 404 && error.code === 'product_missing')
-    || (error.status === 409 && error.code === 'request_id_reused')
-    || (error.status === 422 && error.code === 'numeric_overflow')
+    || (error.status === 409 && ['request_id_reused', 'total_changed', 'insufficient_stock'].includes(error.code))
+    || (error.status === 422 && ['numeric_overflow', 'cash_received_invalid'].includes(error.code))
     || (error.status === 503 && error.code === 'inventory_busy');
 }
