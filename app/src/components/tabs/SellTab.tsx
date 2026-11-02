@@ -7,10 +7,16 @@ import { useI18n } from '../../i18n';
 import { Product } from '../../repositories/product';
 import { styles } from '../../styles';
 import { EmptyState } from '../common/EmptyState';
+import { ListStatus, ListStatusProps } from '../common/ListStatus';
 import { ProductRow } from '../common/ProductRow';
 
 type SellTabProps = {
   products: Product[];
+  catalogStatus: ListStatusProps;
+  lookingUpBarcode: boolean;
+  barcodeError: string | null;
+  onRetryBarcode: () => void;
+  cartLocked: boolean;
   search: string;
   onSearchChange: (value: string) => void;
   onScan: () => void;
@@ -21,7 +27,7 @@ type SellTabProps = {
 };
 
 export function SellTab({
-  products,
+  products, catalogStatus, lookingUpBarcode, barcodeError, onRetryBarcode, cartLocked,
   search,
   onSearchChange,
   onScan,
@@ -39,7 +45,7 @@ export function SellTab({
           <Text style={styles.sectionKicker}>{t('sell.quickSale')}</Text>
           <Text style={styles.sectionTitle}>{t('sell.buildCart')}</Text>
         </View>
-        <Pressable style={styles.scanButton} onPress={onScan}>
+        <Pressable style={styles.scanButton} disabled={lookingUpBarcode || cartLocked} onPress={onScan}>
           <Text style={styles.scanIcon}>⌁</Text>
           <Text style={styles.scanButtonText}>{t('sell.scan')}</Text>
         </Pressable>
@@ -61,14 +67,22 @@ export function SellTab({
         <Text style={styles.muted}>{t('common.itemCount', { count: products.length })}</Text>
       </View>
 
+      <ListStatus {...catalogStatus} />
+      {lookingUpBarcode ? <Text style={styles.muted}>{t('barcode.loading')}</Text> : null}
+      {barcodeError ? <View>
+        <Text style={styles.errorText}>{barcodeError}</Text>
+        <Pressable disabled={lookingUpBarcode || cartLocked} onPress={onRetryBarcode}>
+          <Text style={styles.closeText}>{t('barcode.retry')}</Text>
+        </Pressable>
+      </View> : null}
       <FlatList
         data={products}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="none"
-        renderItem={({ item }) => <ProductRow product={item} onPress={() => onAddToCart(item)} />}
-        ListEmptyComponent={<EmptyState text={t('sell.noProductsMatch')} />}
+        renderItem={({ item }) => <ProductRow product={item} disabled={cartLocked} onPress={() => onAddToCart(item)} />}
+        ListEmptyComponent={!catalogStatus.loading && !catalogStatus.error ? <EmptyState text={t('sell.noProductsMatch')} /> : null}
       />
 
       {cartQuantity > 0 ? (

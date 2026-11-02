@@ -10,10 +10,16 @@ import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
 import { EmptyState } from '../common/EmptyState';
 import { ActionIcon } from '../common/ActionIcon';
+import { ListStatus, ListStatusProps } from '../common/ListStatus';
 import { ProductRow } from '../common/ProductRow';
 
 type ProductsTabProps = {
   products: Product[];
+  catalogStatus: ListStatusProps;
+  historyLoading: boolean;
+  historyRefreshing: boolean;
+  savingProduct: boolean;
+  savingStock: boolean;
   search: string;
   onSearchChange: (value: string) => void;
   onAddProduct: () => void;
@@ -27,7 +33,7 @@ type ProductsTabProps = {
 };
 
 export function ProductsTab({
-  products,
+  products, catalogStatus, historyLoading, historyRefreshing, savingProduct, savingStock,
   search,
   onSearchChange,
   onAddProduct,
@@ -66,6 +72,7 @@ export function ProductsTab({
             accessibilityLabel={t('common.add')}
             accessibilityRole="button"
             style={styles.addProductButton}
+            disabled={savingProduct}
             onPress={onAddProduct}
           >
             <Text style={styles.addProductButtonText}>＋</Text>
@@ -88,26 +95,26 @@ export function ProductsTab({
           <Text style={styles.listTitle}>{t('products.catalogue')}</Text>
           <Text style={styles.muted}>{t('common.productCount', { count: products.length })}</Text>
         </View>
+        <ListStatus {...catalogStatus} />
         {products.length ? products.map((product) => (
           <ProductRow
             key={product.id}
             product={product}
             compact
-            inventoryWritesEnabled
+            disabled={savingProduct}
+            inventoryWritesEnabled={!savingStock}
             onEdit={() => onEditProduct(product)}
             onStockUpdate={() => onOpenStockAdjustment(product.id)}
             onDelete={() => onDeleteProduct(product)}
           />
-        )) : <EmptyState text={search.trim() ? t('products.noProductsMatch') : t('products.noProducts')} />}
+        )) : !catalogStatus.loading && !catalogStatus.error ? <EmptyState text={search.trim() ? t('products.noProductsMatch') : t('products.noProducts')} /> : null}
 
         <View style={styles.historySection}>
           <View style={styles.listHeader}>
             <Text style={styles.listTitle}>{t('products.stockHistory')}</Text>
             <Text style={styles.muted}>{t('products.recentChanges')}</Text>
           </View>
-          {historyError ? <Pressable onPress={onRetryHistory}>
-            <Text style={styles.muted}>{historyError} · {t('startup.retry')}</Text>
-          </Pressable> : null}
+          <ListStatus loading={historyLoading} refreshing={historyRefreshing} error={historyError} onRetry={onRetryHistory} />
           {stockHistory.length ? stockHistory.map((entry) => (
             <View style={styles.stockHistoryCard} key={`${entry.source}-${entry.id}`}>
               <View style={styles.stockHistoryInfo}>
@@ -121,11 +128,11 @@ export function ProductsTab({
                   {entry.quantity > 0 ? '+' : ''}{entry.quantity}
                 </Text>
                 {entry.source === 'adjustment' ? (
-                  <ActionIcon icon="✎" label={t('products.editReason')} onPress={() => onEditStockReason(entry)} />
+                  <ActionIcon icon="✎" label={t('products.editReason')} disabled={savingStock} onPress={() => onEditStockReason(entry)} />
                 ) : null}
               </View>
             </View>
-          )) : <Text style={styles.muted}>{t('products.noStockChanges')}</Text>}
+          )) : !historyLoading && !historyError ? <Text style={styles.muted}>{t('products.noStockChanges')}</Text> : null}
         </View>
       </KeyboardAwareScrollView>
     </View>

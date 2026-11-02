@@ -6,6 +6,7 @@ import { money, shortDate } from '../../formatters';
 import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
 import { EmptyState } from '../common/EmptyState';
+import { ListStatus } from '../common/ListStatus';
 import { Stat } from '../common/Stat';
 import { SaleDetailsModal } from '../modals/SaleDetailsModal';
 
@@ -49,7 +50,7 @@ function dayLabel(value: string, locale: Parameters<Intl.DateTimeFormatConstruct
   }).format(new Date(value));
 }
 
-export function SalesTab({ sales, error, onRetry }: { sales: Sale[]; error: string | null; onRetry: () => void }) {
+export function SalesTab({ sales, error, onRetry, loading, refreshing }: { loading: boolean; refreshing: boolean; sales: Sale[]; error: string | null; onRetry: () => void }) {
   const { locale, t } = useI18n();
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const todayKey = dayKey(new Date());
@@ -84,14 +85,14 @@ export function SalesTab({ sales, error, onRetry }: { sales: Sale[]; error: stri
   return (
     <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
       <Text style={styles.sectionKicker}>{t('sales.history')}</Text>
-      {error ? <Pressable onPress={onRetry}><Text style={styles.errorText}>{error} · {t('startup.retry')}</Text></Pressable> : null}
+      <ListStatus loading={loading} refreshing={refreshing} error={error} onRetry={onRetry} />
       <Text style={styles.sectionTitle}>{t('sales.todaySales')}</Text>
-      <View style={styles.statsRow}>
+      {!loading && (!error || sales.length > 0) ? <View style={styles.statsRow}>
         <Stat label={t('sales.todaySales')} value={`${todaySales.length}`} />
         <Stat label={t('sales.todayRevenue')} value={money(todayRevenue, locale)} />
-      </View>
+      </View> : null}
 
-      {todaySales.length ? todaySales.map(renderSale) : <EmptyState text={t('sales.noSalesToday')} />}
+      {todaySales.length ? todaySales.map(renderSale) : !loading && !error ? <EmptyState text={t('sales.noSalesToday')} /> : null}
 
       {salesByDay.length ? (
         <>

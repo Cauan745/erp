@@ -12,12 +12,13 @@ type CartModalProps = {
   lines: CartLine[];
   total: number;
   locked: boolean;
+  checkoutBlocked: boolean;
   onClose: () => void;
   onUpdateQuantity: (line: CartLine, delta: number) => void;
   onCheckout: () => void;
 };
 
-export function CartModal({ visible, lines, total, locked, onClose, onUpdateQuantity, onCheckout }: CartModalProps) {
+export function CartModal({ visible, lines, total, locked, checkoutBlocked, onClose, onUpdateQuantity, onCheckout }: CartModalProps) {
   const insets = useSafeAreaInsets();
   const { locale, t } = useI18n();
 
@@ -55,7 +56,7 @@ export function CartModal({ visible, lines, total, locked, onClose, onUpdateQuan
                 <Text style={styles.totalLabel}>{t('common.total')}</Text>
                 <Text style={styles.totalValue}>{money(total, locale)}</Text>
               </View>
-              <Pressable style={[styles.primaryButton, locked && styles.buttonDisabled]} disabled={locked} accessibilityState={{ disabled: locked }} onPress={onCheckout}>
+              <Pressable style={[styles.primaryButton, (locked || checkoutBlocked) && styles.buttonDisabled]} disabled={locked || checkoutBlocked} accessibilityState={{ disabled: locked || checkoutBlocked }} onPress={onCheckout}>
                 <Text style={styles.primaryButtonText}>{t('cart.checkout')}</Text>
               </Pressable>
             </>

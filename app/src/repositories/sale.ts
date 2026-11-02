@@ -73,10 +73,11 @@ export function stockShortages(error: ApiError, input: CheckoutInput): Shortage[
       || new Set(rows.map(s => s.productId)).size !== rows.length) throw new AppError('apiResponseInvalid');
   return rows;
 }
-export async function checkout(input: CheckoutInput): Promise<Sale> {
+export async function checkout(input: CheckoutInput, onSubmitted?: (marker: RecoveryMarker) => void): Promise<Sale> {
   const marker: RecoveryMarker = { requestId: createUuid(), operationType: 'checkout',
     apiBaseUrl: API_BASE_URL, submittedAt: new Date().toISOString() };
   await saveRecoveryMarker(marker);
+  onSubmitted?.(marker);
   let saved: Sale;
   try {
     const payload = await apiRequest('/api/v1/sales/checkout', {

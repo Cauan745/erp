@@ -6,6 +6,14 @@ export type TranslationParams = Record<string, string | number>;
 type TranslationValue = string | ((params: TranslationParams) => string);
 
 const ptBR = {
+  'lists.loading': 'Carregando...',
+  'barcode.loading': 'Buscando código de barras...',
+  'barcode.retry': 'Tentar buscar o código novamente',
+  'errors.readFailed': 'Não foi possível carregar os dados da API. Tente novamente.',
+  'errors.readTimeout': 'A API não respondeu a tempo. Tente carregar novamente.',
+  'errors.readInvalid': 'A API enviou dados inválidos. Tente carregar novamente.',
+  'writes.uncertain': 'Não foi possível confirmar o resultado. A alteração pode ter sido salva. Confira os dados no servidor antes de enviar novamente.',
+
   "recovery.title": "Solicitações anteriores",
   "recovery.uncertain": "Resultado da solicitação desconhecido",
   "recovery.check": "Verificar solicitação anterior",
@@ -221,6 +229,14 @@ const ptBR = {
 
 const en = {
   ...ptBR,
+  'lists.loading': 'Loading...',
+  'barcode.loading': 'Looking up barcode...',
+  'barcode.retry': 'Try barcode lookup again',
+  'errors.readFailed': 'Could not load data from the API. Try again.',
+  'errors.readTimeout': 'The API did not respond in time. Try loading again.',
+  'errors.readInvalid': 'The API returned invalid data. Try loading again.',
+  'writes.uncertain': 'Could not confirm the outcome. The change may have been saved. Check the server data before submitting again.',
+
   "recovery.title": "Previous requests",
   "recovery.uncertain": "Request outcome unknown",
   "recovery.check": "Check previous request",

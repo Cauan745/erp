@@ -3,7 +3,6 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppHeader } from '../components/AppHeader';
-import { StartupScreen } from '../components/StartupScreen';
 import { SaleDetailsModal } from '../components/modals/SaleDetailsModal';
 import { CartModal } from '../components/modals/CartModal';
 import { CheckoutModal } from '../components/modals/CheckoutModal';
@@ -23,21 +22,6 @@ export function AppContent() {
   const insets = useSafeAreaInsets();
   const app = useAppState();
   const { t } = useI18n();
-
-  if (app.loading) {
-    return <StartupScreen topInset={insets.top} bottomInset={insets.bottom} />;
-  }
-
-  if (app.startupError) {
-    return (
-      <StartupScreen
-        topInset={insets.top}
-        bottomInset={insets.bottom}
-        error={app.startupError}
-        onRetry={app.retry}
-      />
-    );
-  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -64,6 +48,11 @@ export function AppContent() {
         {app.tab === 'sell' && (
           <SellTab
             products={app.filteredProducts}
+            catalogStatus={{ loading: app.catalogLoading, refreshing: app.catalogRefreshing, error: app.catalogError, onRetry: app.retryCatalog }}
+            lookingUpBarcode={app.lookingUpBarcode}
+            barcodeError={app.barcodeError}
+            onRetryBarcode={app.retryBarcode}
+            cartLocked={app.cartLocked || app.savingStock}
             search={app.search}
             onSearchChange={app.setSearch}
             onScan={() => app.openScanner('sell')}
@@ -76,6 +65,11 @@ export function AppContent() {
         {app.tab === 'products' && (
           <ProductsTab
             products={app.filteredCatalogProducts}
+            catalogStatus={{ loading: app.catalogLoading, refreshing: app.catalogRefreshing, error: app.catalogError, onRetry: app.retryCatalog }}
+            historyLoading={app.historyLoading}
+            historyRefreshing={app.historyRefreshing}
+            savingProduct={app.savingProduct}
+            savingStock={app.savingStock || app.savingCheckout || app.checkingRecovery}
             search={app.productSearch}
             onSearchChange={app.setProductSearch}
             onAddProduct={app.openNewProduct}
@@ -88,7 +82,7 @@ export function AppContent() {
             onRetryHistory={app.retryHistory}
           />
         )}
-        {app.tab === 'sales' && <SalesTab sales={app.sales} error={app.salesError} onRetry={app.retrySales} />}
+        {app.tab === 'sales' && <SalesTab loading={app.salesLoading} refreshing={app.salesRefreshing} sales={app.sales} error={app.salesError} onRetry={app.retrySales} />}
 
         <TabBar activeTab={app.tab} bottomInset={insets.bottom} onChange={app.setTab} />
       </View>
@@ -106,6 +100,7 @@ export function AppContent() {
       <CartModal
         visible={app.cartOpen}
         locked={app.cartLocked}
+        checkoutBlocked={app.checkoutBlocked}
         lines={app.cartLines}
         total={app.cartTotal}
         onClose={() => app.setCartOpen(false)}
@@ -116,13 +111,14 @@ export function AppContent() {
         visible={app.checkoutOpen}
         totalCents={app.cartTotalCents}
         saving={app.savingCheckout}
-        blocked={app.cartLocked && !app.savingCheckout}
+        blocked={(app.cartLocked && !app.savingCheckout) || app.checkoutBlocked}
         onClose={() => app.setCheckoutOpen(false)}
         onConfirm={app.completeCheckout}
       />
       <SaleDetailsModal sale={app.confirmedSale} onClose={app.closeConfirmedSale} />
       <StockUpdateModal
         visible={app.stockAdjustmentOpen}
+        blocked={app.stockChangesBlocked}
         saving={app.savingStock}
         product={app.stockAdjustmentProduct}
         onClose={app.closeStockAdjustment}

@@ -1,5 +1,6 @@
 import { ApiError } from './api/client';
 import { AppError, AppErrorCode } from './errors';
+import { isDefinitiveRejection } from './api/requestRecovery';
 import { Locale, TranslationKey, Translator } from './i18n';
 
 export const money = (value: number, locale: Locale = 'pt-BR') =>
@@ -73,3 +74,24 @@ export const errorMessage = (error: unknown, t: Translator) => {
 
   return t('errors.unknown');
 };
+
+export function readErrorMessage(error: unknown, t: Translator): string {
+  if (error instanceof ApiError) return t('errors.readFailed');
+  if (error instanceof AppError) {
+    if (error.code === 'requestTimeout') return t('errors.readTimeout');
+    if (error.code === 'apiResponseInvalid') return t('errors.readInvalid');
+  }
+  return errorMessage(error, t);
+}
+
+export function uncertainMutation(error: unknown): boolean {
+  if (error instanceof ApiError) return !isDefinitiveRejection(error)
+    && !((error.status === 409 && ['product_name_taken', 'barcode_taken'].includes(error.code))
+      || (error.status === 404 && error.code === 'adjustment_missing'));
+  if (error instanceof AppError) return ['networkUnavailable', 'requestTimeout', 'apiResponseInvalid', 'unknown'].includes(error.code);
+  return true;
+}
+
+export function mutationErrorMessage(error: unknown, t: Translator): string {
+  return uncertainMutation(error) ? t('writes.uncertain') : errorMessage(error, t);
+}

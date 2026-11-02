@@ -1,5 +1,75 @@
 # Implementation progress
 
+## 2026-11-02: Step 6 online loading, refresh, and errors
+
+Step 6 is implemented, passes automated checks, and is user-verified on device. The working tree was clean at the start, with step 5 committed as `cd81dd5`, "Implement transactional checkout and API sales history". The user accepted step 5 after device testing. Step 4 retains its partial device testing and acceptance; its individual untested flows remain unverified. No native Android build or issue update was made in step 6. After device verification, the user explicitly requested committing step 6.
+
+### Independent reads and foreground refresh
+
+[`useOnlineList`](../app/src/app/useOnlineList.ts) owns a separate in-memory array, initial loading flag, subsequent refresh flag, error, revision, and pending promise for each list. Concurrent calls share one read. A successful write invalidates any earlier read before updating the local display or fetching again. Both rows and errors from an invalidated read are ignored. Failed current reads retain the previous array and expose a translated error. `refreshFresh` waits for an existing read to finish before starting a read that includes the confirmed write or foreground transition. It never submits a mutation.
+
+[`useAppState`](../app/src/app/useAppState.ts) starts catalog, sales, history, and recovery-marker reads independently. [`AppContent`](../app/src/app/AppContent.tsx) keeps navigation and recovery reminders accessible even when the initial catalog request is still pending or fails. It no longer gates the whole app on the catalog. [`ListStatus`](../app/src/components/common/ListStatus.tsx) displays initial loading, refreshing, error, and explicit refresh/retry controls inside each existing list area. The sell and product tabs share catalog state; sales and inventory history keep their own state. Empty-list claims are withheld while the initial read is pending or has failed. Existing rows remain visible during refresh and after errors. The header refresh requests every list and reloads markers; its busy indicator reflects list reads only.
+
+An `AppState` listener refreshes all lists and markers when the app returns from a nonactive state to `active`. An existing list read finishes before its foreground fetch begins, with no overlapping HTTP reads for that list. Repeated `active` notifications do not trigger additional reads. Effect cleanup removes the listener. No interval, periodic worker, background mutation, synchronization, or automatic recovery lookup was added. The header's online label describes the app's operating mode. No successful read, mutation, or historical lookup sets a connected-status badge.
+
+Confirmed-write refreshes now follow the data they affect:
+
+| Confirmed action | Lists refreshed |
+| --- | --- |
+| Product creation or soft deletion | Catalog |
+| Product metadata edit | Catalog and inventory history, since adjustment names use current product metadata |
+| Stock adjustment | Catalog and inventory history |
+| Adjustment reason edit | Inventory history only |
+| Checkout | Catalog, sales, and inventory history |
+| Recovery confirmation on the configured backend | Lists affected by that operation |
+| Recovery confirmation on a different recorded backend | No current-backend list changes |
+
+Product and sale responses still update their in-memory display immediately. A failed following refresh displays the confirmed-write message separately and retains the available data. Stock adjustment responses contain no authoritative product balance, so a failed catalog refresh retains the previous balance with its refresh error rather than inventing a balance. The saved adjustment remains confirmed. Reason updates change the displayed reason immediately before refreshing history.
+
+### Barcode lookup and mutation guards
+
+Barcode lookup has its own pending ref, visible loading flag, retained in-memory barcode, translated error, and read-only retry action. Repeated scanner callbacks accept once. Each scanner opening has a token, so callbacks from an earlier opening cannot consume a new scan. Closing invalidates late results. A successful lookup uses the latest cart state to check stock, rather than the cart captured before the HTTP wait. Only `404 product_missing` offers registration; a transport/server/malformed-response error remains a lookup error. [`ScannerModal`](../app/src/components/modals/ScannerModal.tsx) and its camera configuration were not changed.
+
+Product save and deletion share a synchronous guard and visible button state. Deletion rechecks inside the confirmation callback, so repeated callbacks cannot send another DELETE while pending. Product fields, editing, creation, scanning, and dismissal cannot replace a submitted product form. Existing stock/reason/checkout guards remain active. Cart checkout controls also disable during barcode lookup, stock work, recovery checks, unresolved markers, or marker-storage errors. Stock submission controls disable for unresolved recovery as well. Action handlers still check storage before any new adjustment or checkout, including when React state has not yet loaded the markers.
+
+Deferred shortage choices now recheck checkout locks before changing quantity or adding stock. A checkout cannot start during replenishment or barcode lookup. The submitted checkout keeps its copied lines and existing payment controls locked while in flight. Failures retain cart, form, and payment values. An open adjustment form retains an in-memory product snapshot if a later catalog refresh hides that product, so the form does not disappear and discard entered quantity/reason. That snapshot is display context only and is never persisted or used as authoritative stock.
+
+[`formatters`](../app/src/formatters.ts) separates read errors from mutation errors. Read timeouts, malformed responses, and server failures now describe loading/retry, without suggesting a write was sent. Known contract rejections after rollback retain their translated business messages. Lost responses, network failures, malformed mutation responses, and unexpected server failures report an unknown outcome. Product writes and reason edits offer checking the server before another explicit submission; they gain no request-ID replay guarantee. All new text is in the typed Portuguese/English dictionaries in [`i18n/index.ts`](../app/src/i18n/index.ts). Locale-aware BRL/date formatters are unchanged. Existing screen structure, safe areas, keyboard components, and scanner permissions remain in place, with inline list controls added.
+
+### Recovery identity and storage
+
+[`repositories/sale.checkout`](../app/src/repositories/sale.ts) now accepts an optional in-memory callback immediately after awaited marker persistence and before its single POST. The callback records only that marker's identity in the current action. No payload is passed to storage. If storage becomes unreadable after an uncertain POST, the hook can still retain the submitted request ID and keep that cart locked. It does not depend on a successful marker reload to decide whether a submitted checkout is unresolved.
+
+Only lookup or explicit manual reconciliation of that exact request ID on the configured backend can clear its cart lock. Confirmation or reconciliation of a different reminder cannot unlock or clear it. Lookup against a different recorded backend displays that backend's confirmed resource without closing a current adjustment form, clearing a current cart, inserting its sale into current sales, or reporting current-backend refresh failures as part of the old operation.
+
+The AsyncStorage marker format remains `{requestId, operationType, apiBaseUrl, submittedAt}`. All outstanding markers remain preserved; lookup uses the recorded backend; `404 request_not_found` stays unresolved. No read, foreground transition, retry control, or marker reload posts an adjustment or checkout. No request body, form, cart, product, or sale is persisted. Definitive rollback, confirmation, and explicit manual reconciliation remain the only marker-clear paths. A cleanup failure after confirmation still cannot turn the write into a reported failure.
+
+### Persistence mappings, queries, DTOs, and transactions
+
+This step changes app orchestration only. No Java entity, repository, controller, DTO, Flyway migration, or transaction changed. The refresh paths reuse the implemented API:
+
+- [`Product`](../backend/src/main/java/com/stockroom/erp/product/Product.java) still maps signed stock and integer cents to `products`. [`ProductRepository.findActiveOrdered`](../backend/src/main/java/com/stockroom/erp/product/ProductRepository.java) returns active products in contract order, and the exact barcode query remains unchanged. [`ProductService`](../backend/src/main/java/com/stockroom/erp/product/ProductService.java) maps [`ProductResponse`](../backend/src/main/java/com/stockroom/erp/product/ProductResponse.java) inside its service transaction. [`repositories/product`](../app/src/repositories/product.ts) validates/maps cents, nullable cost/barcode, and profit at the app boundary. Metadata and hide operations still take the shared product write lock and cannot overwrite concurrent stock.
+- [`Sale`](../backend/src/main/java/com/stockroom/erp/sale/Sale.java) and [`SaleItem`](../backend/src/main/java/com/stockroom/erp/sale/SaleItem.java) still preserve payment, request identity, and independent item snapshots. [`SaleTransactions.list`](../backend/src/main/java/com/stockroom/erp/sale/SaleTransactions.java) reads ordered sales plus one batched item query and maps [`SaleResponse`](../backend/src/main/java/com/stockroom/erp/sale/SaleResponse.java) in a read-only transaction. The app sale repository validates/maps those DTOs without changing saved line totals. Checkout still atomically locks products in canonical order, writes sale/items, and decrements stock under READ COMMITTED.
+- [`StockAdjustment`](../backend/src/main/java/com/stockroom/erp/stock/StockAdjustment.java) still retains signed quantity, reason, and immutable request identity/fingerprint. [`StockHistoryQuery`](../backend/src/main/java/com/stockroom/erp/stock/StockHistoryQuery.java) combines actual adjustment and sale rows using the existing datasource. [`StockTransactions.history`](../backend/src/main/java/com/stockroom/erp/stock/StockTransactions.java) invokes that DTO projection within its read-only service transaction; [`repositories/stock`](../app/src/repositories/stock.ts) validates sources and quantities. Adjustment writes retain their atomic shared product lock/transaction, and reason edits change only reason. Opening balances still create no history row.
+
+The step 4 and 5 handoffs below retain the detailed lock, constraint, rollback, and duplicate-request explanations. PostgreSQL remains authoritative, Open Session in View stays disabled, and no local business storage was added. Isolated SQLite/sync files and native plugins remain for step 7.
+
+### Automated verification
+
+- `make app-typecheck` passed on the final TypeScript changes.
+- `make app-test` passed 52 tests: the existing 35 plus 17 new online-state tests. New tests exercise independent startup/loading/errors and recovery markers; retained list data with separate retries and single-flight reads; foreground events, listener cleanup, and fresh reads after pending requests; old reads versus confirmed products/sales; confirmed writes with failed refresh; metadata/history names versus sale snapshots; repeated deletion/product/stock submission guards; preserved form context; barcode pending/retry/miss handling, latest cart checks, closed/old scanner callbacks; deferred shortage callbacks during checkout; read-specific error wording; and an uncertain checkout whose marker reload fails, including unrelated confirmation and unresolved 404. The new harness executes effects and cleanup with React/AppState/fetch/storage doubles. It does not render native components or prove Android lifecycle/storage behavior.
+- `make app-config` passed as a regression check. No Expo configuration, plugin, dependency, or native source changed.
+- `make db-test-up` passed against the existing isolated Docker PostgreSQL 18.6 service at port 55433. No volume or database reset was performed. The sandbox initially denied Docker socket access; the required command succeeded with approved access.
+- `make backend-integration-test` passed all 43 real PostgreSQL integration tests with zero failures/errors/skips. The same Maven `verify` run passed all 16 unit/HTTP tests. No Java changes required a separate `make backend-test` run. The first sandbox attempt could not write Maven cache lock files outside the workspace; the approved rerun succeeded. Existing expected constraint/lock-timeout test logs and optional repository metadata warnings did not fail the build. No in-memory database was used as proof of constraints or locks.
+- `npx --no-install expo export --platform android --output-dir /tmp/stockroom-step6-export` passed on the final code. Metro bundled 1020 modules into a Hermes JavaScript bundle. This did not compile/install Android or run Gradle.
+- `git diff --check` passed.
+
+### Device verification and next work
+
+The user confirmed device verification with "Verified" after the automated checks and [README checklist](../README.md#step-6-device-verification) were provided. Step 6 device verification is accepted. This records the user's overall result; no separate per-flow results were supplied. The agent did not independently verify the device, scanner, keyboard, safe areas, native storage, or actual Android foreground/network timing. Existing emulator/LAN/ADB instructions and `EXPO_PUBLIC_API_URL` remain documented in the README.
+
+Step 6 is complete, and the user explicitly requested committing it. The user clarified that step 7 must not be started. No step 7 implementation or issue update was made. Legacy SQLite/sync removal and native dependency cleanup remain future work.
+
 ## 2026-11-02: Step 5 transactional checkout and sales history
 
 Step 5 is implemented and user-verified on device. The working tree was clean at the start, with step 4 committed as `3206911`, "Implement stock adjustments, inventory history, and request recovery". Android startup and product CRUD remain user-verified. Step 4 received partial device testing and user acceptance; individual untested flows remain unverified. This step enables checkout only after its API flow is implemented. No native Android build or issue update was made. After device verification, the user explicitly requested committing step 5.

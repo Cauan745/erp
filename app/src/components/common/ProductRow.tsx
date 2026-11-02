@@ -8,6 +8,7 @@ import { ActionIcon } from './ActionIcon';
 
 type ProductRowProps = {
   product: Product;
+  disabled?: boolean;
   onPress?: () => void;
   onStockUpdate?: () => void;
   onEdit?: () => void;
@@ -16,7 +17,7 @@ type ProductRowProps = {
   inventoryWritesEnabled?: boolean;
 };
 
-export function ProductRow({ product, onPress, onStockUpdate, onEdit, onDelete, compact = false, inventoryWritesEnabled = true }: ProductRowProps) {
+export function ProductRow({ product, onPress, onStockUpdate, onEdit, onDelete, compact = false, disabled = false, inventoryWritesEnabled = true }: ProductRowProps) {
   const { locale, t } = useI18n();
 
   const body = (
@@ -36,17 +37,17 @@ export function ProductRow({ product, onPress, onStockUpdate, onEdit, onDelete, 
         </Text>
         <Text style={styles.muted}>{t('common.inStock', { count: product.stock })}</Text>
         {onPress ? (
-          <ActionIcon icon="＋" label={t('common.add')} onPress={onPress} />
+          <ActionIcon icon="＋" label={t('common.add')} disabled={disabled} onPress={onPress} />
         ) : (
           <View style={styles.iconActionGroup}>
-            {onEdit ? <ActionIcon icon="✎" label={t('products.editProduct')} onPress={onEdit} /> : null}
-            {onStockUpdate ? <ActionIcon icon="±" label={t('common.adjustStock')} onPress={onStockUpdate} disabled={!inventoryWritesEnabled} /> : null}
-            {onDelete ? <ActionIcon icon="×" label={t('common.delete')} onPress={onDelete} danger /> : null}
+            {onEdit ? <ActionIcon icon="✎" label={t('products.editProduct')} disabled={disabled} onPress={onEdit} /> : null}
+            {onStockUpdate ? <ActionIcon icon="±" label={t('common.adjustStock')} onPress={onStockUpdate} disabled={disabled || !inventoryWritesEnabled} /> : null}
+            {onDelete ? <ActionIcon icon="×" label={t('common.delete')} disabled={disabled} onPress={onDelete} danger /> : null}
           </View>
         )}
       </View>
     </View>
   );
 
-  return onPress ? <Pressable onPress={onPress}>{body}</Pressable> : body;
+  return onPress ? <Pressable disabled={disabled} onPress={onPress}>{body}</Pressable> : body;
 }
