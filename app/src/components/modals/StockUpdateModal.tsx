@@ -10,12 +10,13 @@ import { styles } from '../../styles';
 
 type StockUpdateModalProps = {
   visible: boolean;
+  saving: boolean;
   product: Product | null;
   onClose: () => void;
   onSubmit: (quantity: string, reason: string) => void;
 };
 
-export function StockUpdateModal({ visible, product, onClose, onSubmit }: StockUpdateModalProps) {
+export function StockUpdateModal({ visible, saving, product, onClose, onSubmit }: StockUpdateModalProps) {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const [quantity, setQuantity] = useState('');
@@ -49,6 +50,7 @@ export function StockUpdateModal({ visible, product, onClose, onSubmit }: StockU
 
           <Text style={styles.fieldLabel}>{t('stock.change')}</Text>
           <TextInput
+            editable={!saving}
             value={quantity}
             onChangeText={setQuantity}
             placeholder={t('stock.changePlaceholder')}
@@ -66,15 +68,15 @@ export function StockUpdateModal({ visible, product, onClose, onSubmit }: StockU
             placeholder={t('stock.reasonPlaceholder')}
             placeholderTextColor={colors.muted}
             style={styles.input}
-            editable
+            editable={!saving}
             autoCapitalize="sentences"
             returnKeyType="done"
           />
 
-          <Pressable style={styles.primaryButton} onPress={() => onSubmit(quantity, reason)}>
-            <Text style={styles.primaryButtonText}>{t('stock.saveChange')}</Text>
+          <Pressable style={styles.primaryButton} disabled={saving} onPress={() => onSubmit(quantity, reason)}>
+            <Text style={styles.primaryButtonText}>{t(saving ? 'products.saving' : 'stock.saveChange')}</Text>
           </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={onClose}>
+          <Pressable style={styles.secondaryButton} disabled={saving} onPress={onClose}>
             <Text style={styles.secondaryButtonText}>{t('common.cancel')}</Text>
           </Pressable>
             </View>

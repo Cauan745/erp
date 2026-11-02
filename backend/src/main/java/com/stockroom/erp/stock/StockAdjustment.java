@@ -40,7 +40,7 @@ public class StockAdjustment {
         this.reason = reason;
         this.requestId = requestId;
         this.requestFingerprint = requestFingerprint;
-        this.createdAt = Instant.now();
+        this.createdAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
     }
 
     public UUID getId() { return id; }

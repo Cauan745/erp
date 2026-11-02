@@ -17,3 +17,13 @@ export type ProductForm = {
 };
 
 export type SetProductForm = React.Dispatch<React.SetStateAction<ProductForm>>;
+
+export type StockHistoryEntry = {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  reason: string | null;
+  source: 'sale' | 'adjustment';
+  createdAt: string;
+};

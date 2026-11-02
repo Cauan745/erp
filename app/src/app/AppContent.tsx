@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppHeader } from '../components/AppHeader';
@@ -45,6 +45,22 @@ export function AppContent() {
         <AppHeader onRefresh={app.refresh} refreshing={app.refreshing} />
         <Text style={styles.muted}>{t('transition.writesUnavailable')}</Text>
 
+        {app.recoveryError ? <Pressable onPress={() => { void app.loadRecovery(); }}>
+          <Text style={styles.muted}>{app.recoveryError} · {t('startup.retry')}</Text>
+        </Pressable> : null}
+        {app.markers.length ? <ScrollView style={{ maxHeight: 180 }}>
+          <Text style={styles.listTitle}>{t('recovery.title')}</Text>
+          {app.markers.map(marker => <View key={`${marker.apiBaseUrl}-${marker.operationType}-${marker.requestId}`}>
+            <Text style={styles.muted}>{marker.apiBaseUrl} · {marker.requestId}</Text>
+            <Pressable disabled={app.checkingRecovery || app.savingStock} onPress={() => { void app.checkPreviousRequest(marker); }}>
+              <Text style={styles.closeText}>{t(app.checkingRecovery ? 'recovery.checking' : 'recovery.check')}</Text>
+            </Pressable>
+            <Pressable disabled={app.checkingRecovery || app.savingStock} onPress={() => app.reconcilePreviousRequest(marker)}>
+              <Text style={styles.muted}>{t('recovery.reconcile')}</Text>
+            </Pressable>
+          </View>)}
+        </ScrollView> : null}
+
         {app.tab === 'sell' && (
           <SellTab
             products={app.filteredProducts}
@@ -68,6 +84,8 @@ export function AppContent() {
             onOpenStockAdjustment={app.openStockAdjustment}
             onEditStockReason={app.openStockReasonEdit}
             stockHistory={app.stockHistory}
+            historyError={app.historyError}
+            onRetryHistory={app.retryHistory}
           />
         )}
         {app.tab === 'sales' && <SalesTab sales={app.sales} />}
@@ -101,12 +119,14 @@ export function AppContent() {
       />
       <StockUpdateModal
         visible={app.stockAdjustmentOpen}
+        saving={app.savingStock}
         product={app.stockAdjustmentProduct}
         onClose={app.closeStockAdjustment}
         onSubmit={app.saveStockAdjustment}
       />
       <StockReasonModal
         visible={app.stockReasonEditOpen}
+        saving={app.savingStock}
         productName={app.stockReasonEditEntry?.productName ?? ''}
         reason={app.stockReasonEditEntry?.reason ?? null}
         onClose={app.closeStockReasonEdit}

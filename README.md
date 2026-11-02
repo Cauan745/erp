@@ -23,7 +23,7 @@ Spring Boot manages Hibernate and Flyway dependency versions. [Spring system req
 
 ## Current status
 
-Steps 1–2 are verified. Step 3 implements product listing, exact barcode lookup, creation, metadata editing, and soft deletion through `/api/v1/products`. The app catalog now uses the API. The user verified product creation, editing, and soft deletion on Android. Stock adjustments, reason edits, and checkout are disabled until their API paths are implemented. The cart and forms remain in memory. Sales and stock history are empty in this transitional build. SQLite/sync files and native plugins remain pending removal in step 7, but the app does not import their repositories or start a worker. No historical database or device data is imported. Scanner, restart, and failure-path device checks remain pending.
+Steps 1–3 are implemented. Android startup and product CRUD are user-verified. Step 4 adds signed stock adjustments, combined inventory history, reason-only edits, and request recovery. Adjustments use PostgreSQL transactions and shared product locks. The app persists only unresolved request markers, never business data or request bodies. Checkout remains disabled until step 5, and sales lists remain empty. The combined history query already supports saved sale items. SQLite/sync files and their native plugins remain isolated until step 7. No historical database or device data is imported. The user accepted proceeding after partial step 4 device testing; individual checklist coverage remains unconfirmed. See [implementation progress](docs/implementation-progress.md) for the code handoff and automated results.
 
 ## Development
 
@@ -68,6 +68,32 @@ make backend-integration-test
 
 Start the development database with `make db-up`, the API with `make backend-run`, and Metro with the device's reachable `EXPO_PUBLIC_API_URL` and `make app-start`. Open the existing native development build. These commands do not build Android.
 
-Create a product with opening stock, restart the app, find it by barcode, edit its metadata, and hide it. Confirm category suggestions, form scrolling with the keyboard, and scanner permissions. Scan once and confirm repeated camera callbacks add only one cart item. An unknown barcode should offer registration; a disconnected API should show a lookup error. A failed product save must keep the form, and a failed refresh must retain the catalog. The refresh button lets you check uncertain product-write outcomes without automatically resubmitting them. Stock adjustment controls and checkout are disabled during this step.
+Create a product with opening stock, restart the app, find it by barcode, edit its metadata, and hide it. Confirm category suggestions, form scrolling with the keyboard, and scanner permissions. Scan once and confirm repeated camera callbacks add only one cart item. An unknown barcode should offer registration; a disconnected API should show a lookup error. A failed product save must keep the form, and a failed refresh must retain the catalog. The refresh button lets you check uncertain product-write outcomes without automatically resubmitting them. Step 4 now enables stock adjustment controls. Checkout remains disabled.
 
 Device verification is required before committing the step 3 UI changes or posting issue updates. Automated results and the code handoff are in [implementation progress](docs/implementation-progress.md).
+
+
+## Step 4 device verification
+
+Step 4 adds `@react-native-async-storage/async-storage` 2.2.0 for recovery markers. An installed Android build without that native module needs a new native build before adjustments can work. Metro reload alone cannot install it. The app loads marker storage on demand so an older build can still open the catalog; storage errors block new adjustment POSTs. No native build was run by the agent. Get explicit confirmation immediately before any agent-run Android build, as required by [AGENTS.md](AGENTS.md).
+
+For the first step 4 installation, stop the existing Metro process, then run this from the repository root when ready to build Android:
+
+```sh
+cd app
+EXPO_PUBLIC_API_URL=http://192.168.100.121:8081 npx expo run:android --device --port 8082
+```
+
+Use your own reachable API address if different. This command compiles and installs native code with AsyncStorage. Install over the existing app to preserve recovery markers. After this installation, routine JavaScript updates can use `make app-start` from the repository root again. Before rebuilding, older installations show a translated message requesting a native build and block stock adjustments.
+
+With a native build containing AsyncStorage, start the API and Metro as above. Verify these flows on the phone:
+
+- Create a product with stock 10. Its opening balance must not appear in history. Apply +2, then -3, and confirm stock 9 with exactly two history rows. Restart and confirm the saved stock and history reload.
+- Edit an adjustment's reason, including clearing it. Confirm stock, quantity, and original timestamp stay unchanged. Hide the product and confirm its adjustment history remains editable.
+- From a cart shortage, choose to add stock. Confirm the adjustment is saved with the translated automatic reason. Open its reason editor and save without changing the displayed value. The database must retain `sale-shortage-replenishment`. Checkout must remain disabled.
+- Disconnect before saving an adjustment. The form must retain its values. An uncertain submission leaves a reminder and blocks another adjustment until lookup confirms it or you reconcile it manually. Restart and use "Verificar solicitação anterior". Repeated lookup must never send another POST. A `request_not_found` response keeps the reminder.
+- If the configured API URL changes, the reminder must still show and query its recorded backend. Confirmation displays the saved adjustment. The catalog/history refresh uses the currently configured backend. Reconcile only after checking the original server's stock and history. Dismissing the reminder does not cancel an in-flight request.
+- Disconnect during history refresh. Keep the catalog and previous history visible, with a history retry action. After a confirmed adjustment or reason edit, a failed refresh must say the change was saved and must not invite resubmission as a failed write.
+- Check keyboard scrolling, Android back handling, and repeated save taps in both stock modals. Saving disables editing and dismissal while the request is in flight.
+
+The backend tests cover concurrency and rollback separately on PostgreSQL. Lost-response timing, native storage, keyboard behavior, and the complete phone recovery flow still need device verification. No commit or issue update should precede that verification.

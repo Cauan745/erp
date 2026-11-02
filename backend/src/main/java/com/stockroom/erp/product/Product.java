@@ -50,6 +50,11 @@ public class Product {
         this.updatedAt = Instant.now();
     }
 
+    public void adjustStock(int quantity) {
+        stock = Math.addExact(stock, quantity);
+        updatedAt = Instant.now();
+    }
+
     public void hide() {
         if (deletedAt == null) {
             deletedAt = Instant.now();

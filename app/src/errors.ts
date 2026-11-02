@@ -1,4 +1,6 @@
 export type AppErrorCode =
+  | 'recoveryNativeMissing'
+  | 'recoveryStorage'
   | 'networkUnavailable'
   | 'requestTimeout'
   | 'apiResponseInvalid'

@@ -31,6 +31,8 @@ export const shortDate = (value: string, locale: Locale = 'pt-BR') =>
   }).format(new Date(value));
 
 const errorKeys: Record<AppErrorCode, TranslationKey> = {
+  recoveryNativeMissing: 'errors.recoveryNativeMissing',
+  recoveryStorage: 'errors.recoveryStorage',
   networkUnavailable: 'errors.networkUnavailable',
   requestTimeout: 'errors.requestTimeout',
   apiResponseInvalid: 'errors.apiResponseInvalid',
@@ -58,7 +60,8 @@ export const errorMessage = (error: unknown, t: Translator) => {
   if (error instanceof ApiError) {
     const keys: Record<string, TranslationKey> = {
       product_name_taken: 'errors.productNameDuplicate', barcode_taken: 'errors.productBarcodeDuplicate',
-      product_missing: 'errors.productMissing', validation_failed: 'errors.validationFailed',
+      adjustment_missing: 'errors.stockAdjustmentMissing', numeric_overflow: 'errors.numericOverflow',
+      request_id_reused: 'errors.requestIdReused', product_missing: 'errors.productMissing', validation_failed: 'errors.validationFailed',
       inventory_busy: 'errors.inventoryBusy', internal_error: 'errors.apiFailure'
     };
     return t(keys[error.code] ?? 'errors.apiFailure');

@@ -4,7 +4,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { colors } from '../../constants';
 import { STOCK_REASON_AUTO_SALE_REPLENISHMENT } from '../../constants';
 import { Product } from '../../repositories/product';
-import { StockHistoryEntry } from '../../db/stock/types';
+import { StockHistoryEntry } from '../../types';
 import { shortDate } from '../../formatters';
 import { useI18n } from '../../i18n';
 import { styles } from '../../styles';
@@ -22,6 +22,8 @@ type ProductsTabProps = {
   onOpenStockAdjustment: (productId: string) => void;
   onEditStockReason: (entry: StockHistoryEntry) => void;
   stockHistory: StockHistoryEntry[];
+  historyError: string | null;
+  onRetryHistory: () => void;
 };
 
 export function ProductsTab({
@@ -33,7 +35,9 @@ export function ProductsTab({
   onDeleteProduct,
   onOpenStockAdjustment,
   onEditStockReason,
-  stockHistory
+  stockHistory,
+  historyError,
+  onRetryHistory
 }: ProductsTabProps) {
   const { locale, t } = useI18n();
 
@@ -89,7 +93,7 @@ export function ProductsTab({
             key={product.id}
             product={product}
             compact
-            inventoryWritesEnabled={false}
+            inventoryWritesEnabled
             onEdit={() => onEditProduct(product)}
             onStockUpdate={() => onOpenStockAdjustment(product.id)}
             onDelete={() => onDeleteProduct(product)}
@@ -101,6 +105,9 @@ export function ProductsTab({
             <Text style={styles.listTitle}>{t('products.stockHistory')}</Text>
             <Text style={styles.muted}>{t('products.recentChanges')}</Text>
           </View>
+          {historyError ? <Pressable onPress={onRetryHistory}>
+            <Text style={styles.muted}>{historyError} · {t('startup.retry')}</Text>
+          </Pressable> : null}
           {stockHistory.length ? stockHistory.map((entry) => (
             <View style={styles.stockHistoryCard} key={`${entry.source}-${entry.id}`}>
               <View style={styles.stockHistoryInfo}>
@@ -114,7 +121,7 @@ export function ProductsTab({
                   {entry.quantity > 0 ? '+' : ''}{entry.quantity}
                 </Text>
                 {entry.source === 'adjustment' ? (
-                  <ActionIcon icon="✎" disabled label={t('products.editReason')} onPress={() => onEditStockReason(entry)} />
+                  <ActionIcon icon="✎" label={t('products.editReason')} onPress={() => onEditStockReason(entry)} />
                 ) : null}
               </View>
             </View>

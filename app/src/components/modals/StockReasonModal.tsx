@@ -10,6 +10,7 @@ import { styles } from '../../styles';
 
 type StockReasonModalProps = {
   visible: boolean;
+  saving: boolean;
   productName: string;
   reason: string | null;
   onClose: () => void;
@@ -18,6 +19,7 @@ type StockReasonModalProps = {
 
 export function StockReasonModal({
   visible,
+  saving,
   productName,
   reason,
   onClose,
@@ -59,15 +61,16 @@ export function StockReasonModal({
             placeholder={t('stock.reasonPlaceholder')}
             placeholderTextColor={colors.muted}
             style={styles.input}
-            editable
+            editable={!saving}
             autoCapitalize="sentences"
             autoFocus
             returnKeyType="done"
           />
-          <Pressable style={styles.primaryButton} onPress={() => onSubmit(value)}>
-            <Text style={styles.primaryButtonText}>{t('stock.saveReason')}</Text>
+          <Pressable style={styles.primaryButton} disabled={saving} onPress={() => onSubmit(reason === STOCK_REASON_AUTO_SALE_REPLENISHMENT && value === t('products.autoSaleReplenishment')
+            ? STOCK_REASON_AUTO_SALE_REPLENISHMENT : value)}>
+            <Text style={styles.primaryButtonText}>{t(saving ? 'products.saving' : 'stock.saveReason')}</Text>
           </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={onClose}>
+          <Pressable style={styles.secondaryButton} disabled={saving} onPress={onClose}>
             <Text style={styles.secondaryButtonText}>{t('common.cancel')}</Text>
           </Pressable>
             </View>

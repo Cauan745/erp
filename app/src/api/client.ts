@@ -11,11 +11,11 @@ export class ApiError extends Error {
 }
 
 // Each call makes exactly one HTTP attempt. Mutations are never replayed.
-export async function apiRequest(path: string, init: RequestInit = {}): Promise<unknown> {
+export async function apiRequest(path: string, init: RequestInit = {}, apiBaseUrl = API_BASE_URL): Promise<unknown> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const response = await fetch(`${apiBaseUrl}${path}`, {
       ...init,
       headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
       signal: controller.signal

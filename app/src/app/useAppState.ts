@@ -3,7 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { createProduct, deleteProduct, findProductByBarcode, listProducts, updateProduct, Product } from '../repositories';
 import { PaymentMethod, Sale } from '../db/sale/types';
-import { StockHistoryEntry } from '../db/stock/types';
+import { StockHistoryEntry } from '../types';
+import { adjustStock, listStockHistory, lookupAdjustment, updateStockReason } from '../repositories/stock';
+import { clearRecoveryMarker, listRecoveryMarkers, RecoveryMarker } from '../api/requestRecovery';
+import { ApiError } from '../api/client';
+import { STOCK_REASON_AUTO_SALE_REPLENISHMENT } from '../constants';
 import { errorMessage } from '../formatters';
 import { useI18n } from '../i18n';
 import { Cart, CartLine, ProductForm, SetProductForm, Tab } from '../types';
@@ -29,7 +33,16 @@ export function useAppState() {
   const [tab, setTab] = useState<Tab>('sell');
   const [products, setProducts] = useState<Product[]>([]);
   const sales: Sale[] = [];
-  const stockHistory: StockHistoryEntry[] = [];
+  const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const historyRevision = useRef(0);
+  const historyPending = useRef<Promise<void> | null>(null);
+  const stockWritePending = useRef(false);
+  const [savingStock, setSavingStock] = useState(false);
+  const [markers, setMarkers] = useState<RecoveryMarker[]>([]);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [checkingRecovery, setCheckingRecovery] = useState(false);
+  const recoveryPending = useRef(false);
   const [cart, setCart] = useState<Cart>({});
   const [search, setSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
@@ -73,6 +86,29 @@ export function useAppState() {
   useEffect(() => {
     void refresh().catch(() => undefined);
   }, [refresh]);
+
+  const refreshHistory = useCallback(() => {
+    if (historyPending.current) return historyPending.current;
+    const revision = historyRevision.current;
+    const request = (async () => {
+      try {
+        const rows = await listStockHistory();
+        if (revision === historyRevision.current) setStockHistory(rows);
+        setHistoryError(null);
+      } catch (error) { setHistoryError(errorMessage(error, t)); throw error; }
+      finally { historyPending.current = null; }
+    })();
+    historyPending.current = request;
+    return request;
+  }, [t]);
+  const loadRecovery = useCallback(async () => {
+    try { setMarkers(await listRecoveryMarkers()); setRecoveryError(null); }
+    catch (error) { setRecoveryError(errorMessage(error, t)); }
+  }, [t]);
+  useEffect(() => {
+    void refreshHistory().catch(() => undefined);
+    void loadRecovery();
+  }, [refreshHistory, loadRecovery]);
 
   const cartLines = Object.values(cart);
   const cartTotal = cartLines.reduce((sum, line) => sum + line.lineTotal, 0);
@@ -126,8 +162,15 @@ export function useAppState() {
   };
 
   const unavailable = () => Alert.alert(t('transition.title'), t('transition.writesUnavailable'));
-  const addStock = async (_productId: string, _quantity: number) => { unavailable(); return false; };
-  const addStockAndProductToCart = async (_product: Product, _quantity: number) => { unavailable(); };
+  const addStock = async (productId: string, quantity: number) => {
+    if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 2147483647) {
+      Alert.alert(t('alerts.addStockFailedTitle'), t('errors.stockQuantityPositive')); return false;
+    }
+    return submitStockChange(productId, quantity, STOCK_REASON_AUTO_SALE_REPLENISHMENT);
+  };
+  const addStockAndProductToCart = async (product: Product, quantity: number) => {
+    if (await addStock(product.id, quantity)) addProductToCart(product);
+  };
 
   const addToCart = (product: Product) => {
     const existing = cart[product.id];
@@ -394,8 +437,101 @@ export function useAppState() {
     closeProductForm();
   };
 
-  const saveStockAdjustment = async (_quantity: string, _reason: string) => { unavailable(); };
-  const saveStockReason = async (_reason: string) => { unavailable(); };
+  const refreshStockAfterWrite = async () => {
+    await historyPending.current?.catch(() => undefined);
+    const results = await Promise.allSettled([refreshAfterWrite(), refreshHistory()]);
+    if (results[1].status === 'rejected') Alert.alert(t('stock.refreshFailed'), errorMessage(results[1].reason, t));
+  };
+
+  const submitStockChange = async (productId: string, quantity: number, reason: string): Promise<boolean> => {
+    if (stockWritePending.current || recoveryPending.current) return false;
+    stockWritePending.current = true;
+    setSavingStock(true);
+    try {
+      // Read storage again so neither startup latency nor stale React state can bypass unresolved markers.
+      if ((await listRecoveryMarkers()).length) {
+        Alert.alert(t('recovery.title'), t('recovery.unresolved')); return false;
+      }
+      await adjustStock(productId, quantity, reason);
+      catalogRevision.current += 1;
+      historyRevision.current += 1;
+      showNotice(t('alerts.stockUpdated'));
+      await refreshStockAfterWrite();
+      return true;
+    } catch (error) {
+      const outstanding = await listRecoveryMarkers().catch(() => null);
+      Alert.alert(t(outstanding?.length ? 'recovery.uncertain' : 'alerts.updateStockFailedTitle'), errorMessage(error, t)
+        + (outstanding?.length ? `\n\n${t('recovery.unresolved')}` : ''));
+      return false;
+    } finally {
+      await loadRecovery();
+      stockWritePending.current = false;
+      setSavingStock(false);
+    }
+  };
+  const saveStockAdjustment = async (quantityInput: string, reason: string) => {
+    if (stockWritePending.current || recoveryPending.current || !stockAdjustmentProductId) return;
+    const quantity = Number(quantityInput.trim());
+    if (!quantityInput.trim() || !Number.isInteger(quantity) || !quantity
+        || quantity < -2147483648 || quantity > 2147483647) {
+      Alert.alert(t('alerts.updateStockFailedTitle'), t('errors.stockChangeInteger')); return;
+    }
+    if (await submitStockChange(stockAdjustmentProductId, quantity, reason)) setStockAdjustmentProductId(null);
+  };
+  const saveStockReason = async (reason: string) => {
+    if (stockWritePending.current || recoveryPending.current || !stockReasonEditEntry || stockReasonEditEntry.source !== 'adjustment') return;
+    stockWritePending.current = true;
+    setSavingStock(true);
+    try {
+      const saved = await updateStockReason(stockReasonEditEntry.id, reason);
+      historyRevision.current += 1;
+      setStockHistory(rows => rows.map(row => row.source === 'adjustment' && row.id === saved.id
+        ? { ...row, reason: saved.reason } : row));
+      setStockReasonEditEntry(null);
+      showNotice(t('alerts.stockReasonUpdated'));
+      await refreshStockAfterWrite();
+    } catch (error) { Alert.alert(t('alerts.updateStockReasonFailedTitle'), errorMessage(error, t)); }
+    finally { stockWritePending.current = false; setSavingStock(false); }
+  };
+  const checkPreviousRequest = async (marker: RecoveryMarker) => {
+    if (recoveryPending.current || stockWritePending.current) return;
+    recoveryPending.current = true;
+    setCheckingRecovery(true);
+    try {
+      if (marker.operationType !== 'adjustment') { Alert.alert(t('recovery.title'), t('recovery.checkoutPending')); return; }
+      const saved = await lookupAdjustment(marker);
+      catalogRevision.current += 1;
+      historyRevision.current += 1;
+      setStockAdjustmentProductId(null);
+      Alert.alert(t('recovery.confirmed'), t('recovery.result', {
+        backend: marker.apiBaseUrl, id: saved.id, quantity: saved.quantity,
+        product: products.find(p => p.id === saved.productId)?.name ?? saved.productId,
+        reason: saved.reason === STOCK_REASON_AUTO_SALE_REPLENISHMENT
+          ? t('products.autoSaleReplenishment') : saved.reason ?? t('products.noReason')
+      }));
+      await clearRecoveryMarker(marker).catch(error => Alert.alert(t('recovery.title'), errorMessage(error, t)));
+      await refreshStockAfterWrite();
+    } catch (error) {
+      Alert.alert(t('recovery.title'), error instanceof ApiError && error.status === 404 && error.code === 'request_not_found'
+        ? t('recovery.unresolved') : errorMessage(error, t));
+    } finally { await loadRecovery(); recoveryPending.current = false; setCheckingRecovery(false); }
+  };
+  const reconcilePreviousRequest = (marker: RecoveryMarker) => {
+    if (recoveryPending.current || stockWritePending.current) return;
+    Alert.alert(t('recovery.reconcile'), t('recovery.reconcileMessage', { backend: marker.apiBaseUrl }), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('recovery.dismiss'), onPress: () => {
+        if (recoveryPending.current || stockWritePending.current) return;
+        recoveryPending.current = true;
+        setCheckingRecovery(true);
+        void (async () => {
+          try { await clearRecoveryMarker(marker); }
+          catch (error) { Alert.alert(t('recovery.title'), errorMessage(error, t)); }
+          finally { await loadRecovery(); recoveryPending.current = false; setCheckingRecovery(false); }
+        })();
+      } }
+    ]);
+  };
   const completeCheckout = async (_method: PaymentMethod, _cash: number | null): Promise<void> => { unavailable(); };
 
   const retry = () => {
@@ -415,6 +551,15 @@ export function useAppState() {
     editingProductId,
     productFormOpen,
     savingProduct,
+    savingStock,
+    markers,
+    recoveryError,
+    checkingRecovery,
+    checkPreviousRequest,
+    reconcilePreviousRequest,
+    loadRecovery,
+    historyError,
+    retryHistory: () => { void refreshHistory().catch(() => undefined); },
     setProductForm: setProductForm as SetProductForm,
     filteredProducts,
     filteredCatalogProducts,
@@ -434,14 +579,14 @@ export function useAppState() {
     setCheckoutOpen,
     stockAdjustmentProduct,
     stockAdjustmentOpen: Boolean(stockAdjustmentProductId),
-    openStockAdjustment: (_id: string) => unavailable(),
-    closeStockAdjustment: () => setStockAdjustmentProductId(null),
+    openStockAdjustment: (id: string) => { if (!stockWritePending.current) setStockAdjustmentProductId(id); },
+    closeStockAdjustment: () => { if (!stockWritePending.current) setStockAdjustmentProductId(null); },
     stockReasonEditEntry,
     stockReasonEditOpen: Boolean(stockReasonEditEntry),
     openStockReasonEdit: (entry: StockHistoryEntry) => {
-      unavailable();
+      if (!stockWritePending.current && entry.source === 'adjustment') setStockReasonEditEntry(entry);
     },
-    closeStockReasonEdit: () => setStockReasonEditEntry(null),
+    closeStockReasonEdit: () => { if (!stockWritePending.current) setStockReasonEditEntry(null); },
     saveStockReason,
     openScanner,
     addToCart,
@@ -459,6 +604,10 @@ export function useAppState() {
     startupError,
     retry,
     refreshing,
-    refresh: () => { void refresh().catch((error) => Alert.alert(t('alerts.catalogRefreshFailedTitle'), errorMessage(error, t))); }
+    refresh: () => {
+      void refresh().catch((error) => Alert.alert(t('alerts.catalogRefreshFailedTitle'), errorMessage(error, t)));
+      void refreshHistory().catch(() => undefined);
+      void loadRecovery();
+    }
   };
 }
