@@ -55,11 +55,11 @@ Copy the repository to your VPS with Docker and the Compose plugin installed. Fr
 
 ```sh
 docker compose -f docker-compose.vps.yml up -d --build --wait
-curl --fail --retry 30 --retry-connrefused --retry-delay 2 http://localhost:8081/healthz
+curl --fail --retry 30 --retry-connrefused --retry-delay 2 http://localhost:8000/healthz
 docker compose -f docker-compose.vps.yml logs -f api
 ```
 
-The API is available at `http://YOUR_VPS_IP:8081`. Set the app's `EXPO_PUBLIC_API_URL` to that address and restart Metro. The API has no authentication, so restrict inbound port 8081 to your test device's IP or trusted network. This setup uses HTTP and test-only database credentials; use disposable test data.
+The VPS publishes port 8000, forwarding to the API's container port 8081. For Nginx running on the VPS host, use `http://127.0.0.1:8000` as the upstream. Set the app's `EXPO_PUBLIC_API_URL` to your Nginx URL and restart Metro. The API has no authentication, so restrict access through Nginx to your test IP or trusted network and restrict direct access to port 8000 as well. This setup uses test-only database credentials; use disposable test data.
 
 The Dockerfile builds a clean executable JAR with Java 21 and runs it as a non-root user. PostgreSQL has no published host port and stores data in the separate `stockroom-vps-test_vps_test_data` volume. Flyway applies the schema at startup. This Compose file runs independently of the local development and integration-test services. The image build skips tests; run the checks below separately.
 
@@ -88,7 +88,7 @@ Current app checks pass typecheck, Expo config, and 53 tests with no failures or
 
 The backend was reverified on 2026-11-11 after replacing invalid generated classes with `./mvnw clean spring-boot:run`: startup completed against development PostgreSQL with Flyway and Hibernate validation, and `/healthz` returned `{"status":"ok"}`. `make backend-test`, `make db-test-up`, and `make backend-integration-test` passed: 16 unit/HTTP tests and 45 real PostgreSQL integration tests, with no failures or skips. The isolated PostgreSQL service was reused without resetting data. No Java source, entity mappings, repository queries, DTO mappings, or transactions changed. Device behavior was not rechecked. App tests use native/storage/fetch doubles; the user's baseline device acceptance was an overall report without per-scenario timing traces.
 
-The VPS test deployment files passed `docker compose -f docker-compose.vps.yml config --quiet` on 2026-11-11. The Docker image has not been built or run, and VPS connectivity has not been verified. Local services remain stopped.
+The VPS test deployment files passed `docker compose -f docker-compose.vps.yml config --quiet` on 2026-11-11, including revalidation after changing the VPS host port to 8000. The Docker image has not been built or run, and VPS/Nginx connectivity has not been verified. Local services remain stopped.
 
 Read-only inspection of the moto g22's installed APK confirmed the removed Expo SQLite/background modules were absent and AsyncStorage and VisionCamera remained. iOS behavior was not independently verified.
 
