@@ -1,0 +1,9 @@
+# Only send backend build inputs. Exclude local output, IDE files, and secrets.
+**
+!.mvn/
+!.mvn/**
+!mvnw
+!pom.xml
+!src/
+!src/**
+!Dockerfile

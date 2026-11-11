@@ -41,11 +41,33 @@ Compose reads root `.env` automatically for variable substitution. Spring does n
 
 Development PostgreSQL has its own named Compose volume. The integration-test service has a different volume, database, and port. Neither service attaches the original project's volume. Startup applies Flyway migrations and then validates JPA mappings. Hibernate never creates schema. Normal commands do not reset data.
 
+If startup fails with `stockController: Lookup method resolution failed` and `NoClassDefFoundError: AdjustmentResponse`, rebuild the generated classes with `cd backend && ./mvnw clean spring-boot:run`. Invalid compiled classes in `backend/target` caused this failure on 2026-11-11; Maven's incremental compile had considered them up to date. The clean rebuild replaces generated output without resetting PostgreSQL data. If it recurs while a Java IDE is open, check whether its compiler is writing unresolved-error classes into Maven's `target/classes` directory.
+
 A physical phone needs a reachable host IP, for example `EXPO_PUBLIC_API_URL=http://192.168.1.20:8081 make app-start`. With USB debugging, `adb reverse tcp:8081 tcp:8081` permits `http://localhost:8081` on the phone. The API client uses `EXPO_PUBLIC_API_URL`, defaulting to the Android emulator URL `http://10.0.2.2:8081`. Restart Metro after changing that value.
 
 `make app-start` starts Metro on port 8082 and explicitly targets the installed native development build. This avoids the API's port 8081 and Expo Go, which cannot load VisionCamera. Open the installed Stockroom app. The current Android manifest has no development URL scheme, so a QR link may not launch it. If the installed build looks for another Metro address, set its developer-menu server address to the computer's LAN IP and port 8082. With USB, `adb reverse tcp:8082 tcp:8082` also forwards Metro; it is separate from the API forwarding above. An explicit `EXPO_PUBLIC_API_URL` supplied when invoking Make takes precedence over `.env`.
 
 VisionCamera requires a native development build. Starting Expo only starts Metro. Native Android builds have frozen this host. Get explicit confirmation immediately before `expo run:android`, `./gradlew`, or any command that invokes them. The copied native source is retained; credentials, debug keystores, local properties, dependencies, caches, and build outputs are excluded. Android tooling can generate a local debug keystore when a native build is later authorized.
+
+## VPS test deployment
+
+Copy the repository to your VPS with Docker and the Compose plugin installed. From the repository root:
+
+```sh
+docker compose -f docker-compose.vps.yml up -d --build --wait
+curl --fail --retry 30 --retry-connrefused --retry-delay 2 http://localhost:8081/healthz
+docker compose -f docker-compose.vps.yml logs -f api
+```
+
+The API is available at `http://YOUR_VPS_IP:8081`. Set the app's `EXPO_PUBLIC_API_URL` to that address and restart Metro. The API has no authentication, so restrict inbound port 8081 to your test device's IP or trusted network. This setup uses HTTP and test-only database credentials; use disposable test data.
+
+The Dockerfile builds a clean executable JAR with Java 21 and runs it as a non-root user. PostgreSQL has no published host port and stores data in the separate `stockroom-vps-test_vps_test_data` volume. Flyway applies the schema at startup. This Compose file runs independently of the local development and integration-test services. The image build skips tests; run the checks below separately.
+
+To deploy updated code, run the same `up -d --build --wait` command. To stop the containers while preserving data:
+
+```sh
+docker compose -f docker-compose.vps.yml down
+```
 
 ## Checks
 
@@ -64,7 +86,9 @@ make backend-integration-test
 
 Current app checks pass typecheck, Expo config, and 53 tests with no failures or skips. Five obsolete upgrade-only tests were removed with their compatibility implementation. This JavaScript cleanup has not been checked on the device yet.
 
-The backend was last verified at the accepted baseline `eb16296`: 16 unit/HTTP tests and 45 real PostgreSQL integration tests passed with no failures or skips. The isolated PostgreSQL service was reused without resetting data. Backend code is unchanged by this cleanup. App tests use native/storage/fetch doubles; the user's baseline device acceptance was an overall report without per-scenario timing traces.
+The backend was reverified on 2026-11-11 after replacing invalid generated classes with `./mvnw clean spring-boot:run`: startup completed against development PostgreSQL with Flyway and Hibernate validation, and `/healthz` returned `{"status":"ok"}`. `make backend-test`, `make db-test-up`, and `make backend-integration-test` passed: 16 unit/HTTP tests and 45 real PostgreSQL integration tests, with no failures or skips. The isolated PostgreSQL service was reused without resetting data. No Java source, entity mappings, repository queries, DTO mappings, or transactions changed. Device behavior was not rechecked. App tests use native/storage/fetch doubles; the user's baseline device acceptance was an overall report without per-scenario timing traces.
+
+The VPS test deployment files passed `docker compose -f docker-compose.vps.yml config --quiet` on 2026-11-11. The Docker image has not been built or run, and VPS connectivity has not been verified. Local services remain stopped.
 
 Read-only inspection of the moto g22's installed APK confirmed the removed Expo SQLite/background modules were absent and AsyncStorage and VisionCamera remained. iOS behavior was not independently verified.
 
